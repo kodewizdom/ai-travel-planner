@@ -57,6 +57,7 @@ export default function App() {
   const [destinationAirport, setDestinationAirport] = useState('');
   const [hotelPreference, setHotelPreference] = useState('tourist_attraction');
   const [tripType, setTripType] = useState('round_trip');
+  const [flightsOnly, setFlightsOnly] = useState(true);
   const [travellers, setTravellers] = useState(2);
   const [budget, setBudget] = useState('');
   const [departureDate, setDepartureDate] = useState(formatDate(defaultDeparture));
@@ -205,6 +206,8 @@ export default function App() {
       return;
     }
 
+    const isFlightsOnlyMode = tripType === 'one_way' && flightsOnly;
+
     const payload = {
       origin,
       destination,
@@ -212,6 +215,7 @@ export default function App() {
       destination_airport: destinationAirport || null,
       hotel_preference: hotelPreference,
       trip_type: tripType,
+      flights_only: isFlightsOnlyMode,
       travellers: Number(travellers),
       departure_date: departureDate,
       return_date: tripType === 'round_trip' ? returnDate : null,
@@ -226,7 +230,9 @@ export default function App() {
     const datesText = tripType === 'round_trip' ? `${departureDate} to ${returnDate}` : departureDate;
     const budgetText = budget.trim() ? ` · ₹${budget.trim()}` : '';
 
-    const summaryText = `${origLabel} → ${destLabel} · ${tripLabel} · ${travellers} travellers · ${hotelLabel} · ${datesText}${budgetText}`;
+    const summaryText = isFlightsOnlyMode
+      ? `${origLabel} → ${destLabel} · One Way (7-Day Fares from ${departureDate}) · ${travellers} travellers${budgetText}`
+      : `${origLabel} → ${destLabel} · ${tripLabel} · ${travellers} travellers · ${hotelLabel} · ${datesText}${budgetText}`;
 
     setIsLoading(true);
     if (isMobile) {
@@ -299,6 +305,7 @@ export default function App() {
     setDestinationAirport('');
     setHotelPreference('tourist_attraction');
     setTripType('round_trip');
+    setFlightsOnly(true);
     setTravellers(2);
     setBudget('');
 
@@ -399,27 +406,6 @@ export default function App() {
             )}
           </div>
 
-          {/* Hotel Location Preference */}
-          <div className="form-group">
-            <label>Hotel Location</label>
-            <div className="preference-badge-group">
-              <button
-                type="button"
-                className={`pref-btn ${hotelPreference === 'tourist_attraction' ? 'active' : ''}`}
-                onClick={() => setHotelPreference('tourist_attraction')}
-              >
-                City Center
-              </button>
-              <button
-                type="button"
-                className={`pref-btn ${hotelPreference === 'near_airport' ? 'active' : ''}`}
-                onClick={() => setHotelPreference('near_airport')}
-              >
-                Airport Transit
-              </button>
-            </div>
-          </div>
-
           {/* Travel Type */}
           <div className="form-group">
             <label>Travel Type</label>
@@ -439,7 +425,52 @@ export default function App() {
                 One Way
               </button>
             </div>
+
+            {tripType === 'one_way' && (
+              <div className="airport-subselect">
+                <span className="sub-label">One-Way Mode</span>
+                <div className="radio-group">
+                  <button
+                    type="button"
+                    className={`radio-btn ${flightsOnly ? 'active' : ''}`}
+                    onClick={() => setFlightsOnly(true)}
+                  >
+                    7-Day Flights Only
+                  </button>
+                  <button
+                    type="button"
+                    className={`radio-btn ${!flightsOnly ? 'active' : ''}`}
+                    onClick={() => setFlightsOnly(false)}
+                  >
+                    Full Trip Plan
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
+
+          {/* Hotel Location Preference (hidden in Flights-Only mode) */}
+          {!(tripType === 'one_way' && flightsOnly) && (
+            <div className="form-group">
+              <label>Hotel Location</label>
+              <div className="preference-badge-group">
+                <button
+                  type="button"
+                  className={`pref-btn ${hotelPreference === 'tourist_attraction' ? 'active' : ''}`}
+                  onClick={() => setHotelPreference('tourist_attraction')}
+                >
+                  City Center
+                </button>
+                <button
+                  type="button"
+                  className={`pref-btn ${hotelPreference === 'near_airport' ? 'active' : ''}`}
+                  onClick={() => setHotelPreference('near_airport')}
+                >
+                  Airport Transit
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Travellers & Budget */}
           <div className="form-row">
@@ -468,7 +499,7 @@ export default function App() {
           {/* Dates */}
           <div className="form-row">
             <div className="form-group">
-              <label>Departure</label>
+              <label>{tripType === 'one_way' && flightsOnly ? 'Start Date' : 'Departure'}</label>
               <input
                 type="date"
                 min={formatDate(today)}
@@ -482,22 +513,38 @@ export default function App() {
                 required
               />
             </div>
-            <div className="form-group">
-              <label>Return</label>
-              <input
-                type="date"
-                min={departureDate}
-                value={returnDate}
-                disabled={tripType === 'one_way'}
-                onChange={e => setReturnDate(e.target.value)}
-                required={tripType === 'round_trip'}
-              />
-            </div>
+            {tripType === 'one_way' && flightsOnly ? (
+              <div className="form-group">
+                <label>Window</label>
+                <input
+                  type="text"
+                  value="7 Days (1 Week)"
+                  disabled
+                  readOnly
+                />
+              </div>
+            ) : (
+              <div className="form-group">
+                <label>Return</label>
+                <input
+                  type="date"
+                  min={departureDate}
+                  value={returnDate}
+                  disabled={tripType === 'one_way'}
+                  onChange={e => setReturnDate(e.target.value)}
+                  required={tripType === 'round_trip'}
+                />
+              </div>
+            )}
           </div>
 
           {/* Plan Trip Button */}
           <button type="submit" className="btn-primary" disabled={isLoading}>
-            <span>{isLoading ? 'Generating Plan...' : 'Generate Itinerary'}</span>
+            <span>
+              {isLoading
+                ? (tripType === 'one_way' && flightsOnly ? 'Comparing 7-Day Fares...' : 'Generating Plan...')
+                : (tripType === 'one_way' && flightsOnly ? 'Search 7-Day Flights' : 'Generate Itinerary')}
+            </span>
           </button>
         </form>
 

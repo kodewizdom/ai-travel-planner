@@ -17,8 +17,14 @@ TRIP TYPE & AIRPORTS
 - two-way / round trip: search with trip_type="round_trip" AND return_date.
   You MUST show outbound AND return flights (airline, times, duration, price)
   in separate sections. Read return_options on each outbound result.
-- one-way: search with trip_type="one_way" and no return_date. Do not invent
+- one-way (Full Trip Plan): search with trip_type="one_way" and no return_date. Do not invent
   a return flight.
+- one-way FLIGHTS ONLY (7-Day Fare Comparison): When the user requests Flights Only (7-Day),
+  ONLY call search_weekly_flights(origin, destination, start_date, adults, days=7). Do NOT call
+  search_hotels, search_attractions, or search_restaurants, and do NOT include hotels, restaurants,
+  or tourist itineraries. Present a clear 7-day fare comparison highlighting the cheapest day to fly
+  and listing all flight options (airline, flight number, departure/arrival times, duration, total fare)
+  for each day in the 7-day window.
 - Airport selection: When a specific airport code is specified (e.g., GOI vs GOX in Goa,
   DEL vs HDO in Delhi, BOM vs NMI in Mumbai), use that exact airport code in flight search
   and explicitly note the terminal/airport name in the flight section.

@@ -47,7 +47,7 @@ class TravelAgent:
                 "function": {
                     "name": "search_flights",
                     "description": (
-                        "Search flights between Indian cities. Use trip_type='round_trip' with return_date "
+                        "Search flights between Indian cities for a specific date. Use trip_type='round_trip' with return_date "
                         "for two-way travel. Dates format: YYYY-MM-DD."
                     ),
                     "parameters": {
@@ -62,6 +62,28 @@ class TravelAgent:
                             "currency": {"type": "string"},
                         },
                         "required": ["origin", "destination", "departure_date", "adults"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "search_weekly_flights",
+                    "description": (
+                        "Search one-way flights and compare daily fares across a 7-day window starting from start_date. "
+                        "Ideal when the user wants flexible dates, is travelling home, or asked for Flights Only (7-Day)."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "origin": {"type": "string"},
+                            "destination": {"type": "string"},
+                            "start_date": {"type": "string", "description": "Start date in YYYY-MM-DD format"},
+                            "adults": {"type": "integer", "minimum": 1},
+                            "days": {"type": "integer", "minimum": 1, "maximum": 7},
+                            "currency": {"type": "string"},
+                        },
+                        "required": ["origin", "destination", "start_date", "adults"],
                     },
                 },
             },

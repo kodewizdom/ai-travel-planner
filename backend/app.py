@@ -115,6 +115,7 @@ class PlanRequest(BaseModel):
     destination_airport: str | None = None
     hotel_preference: str = "tourist_attraction"  # "tourist_attraction" or "near_airport"
     trip_type: str = "round_trip"  # "round_trip" or "one_way"
+    flights_only: bool = False  # True for One-Way 7-Day Flexible Flight Fare Comparison
     travellers: int = 2
     departure_date: str
     return_date: str | None = None
@@ -186,6 +187,15 @@ def handle_plan(req: PlanRequest):
             "a destination snapshot, attractions, restaurants, a day-by-day itinerary through "
             "the return date, and a budget breakdown. Stay within the budget "
             "if the searched prices allow; if not, say so clearly."
+        )
+    elif req.flights_only:
+        form_prompt = (
+            f"FLIGHTS ONLY (7-Day Fare Calendar): Find one-way flights from {orig_display} to {dest_display} "
+            f"for {int(req.travellers)} people across a 7-day window starting on {req.departure_date}{budget_part}. "
+            "Do NOT search or recommend hotels, tourist attractions, restaurants, or a sightseeing itinerary. "
+            "Call ONLY search_weekly_flights to retrieve daily flight options and fares for all 7 days. "
+            "Present a clean 7-day comparison table showing the cheapest day to fly, airline options, "
+            "flight numbers, departure and arrival times, durations, and prices. If a budget was provided, state which flights fit within it."
         )
     else:
         form_prompt = (

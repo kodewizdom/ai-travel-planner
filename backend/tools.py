@@ -210,21 +210,21 @@ class TravelTools:
             pass
         return f"{clean.title()} is one of India's prominent travel destinations."
 
-    def search_flights(
-        self,
-        origin: str,
-        destination: str,
-        departure_date: str,
-        return_date: str | None = None,
-        adults: int = 1,
-        currency: str = "INR",
-        trip_type: str | None = None,
-    ) -> dict[str, Any]:
-        """Search flight routes and calculate realistic flight schedules and fares."""
+    # Day-of-week demand pricing multipliers (0=Monday ... 6=Sunday)
+    WEEKDAY_PRICE_FACTORS: dict[int, float] = {
+        0: 0.96,  # Monday
+        1: 0.86,  # Tuesday (midweek dip)
+        2: 0.88,  # Wednesday
+        3: 0.94,  # Thursday
+        4: 1.15,  # Friday (weekend rush)
+        5: 1.08,  # Saturday
+        6: 1.20,  # Sunday (peak rush)
+    }
+
+    def _compute_route_metrics(self, origin: str, destination: str) -> tuple[str, str, int, int]:
+        """Resolve airport codes and calculate flight duration (min) and base fare (INR)."""
         dep_code = self.resolve_airport_code(origin)
         arr_code = self.resolve_airport_code(destination)
-        adults = max(1, int(adults))
-        is_round_trip = (trip_type in ("round_trip", "roundtrip")) or bool(return_date)
 
         dep_info: Any = self.airports.get(dep_code, {})
         arr_info: Any = self.airports.get(arr_code, {})
@@ -236,6 +236,22 @@ class TravelTools:
 
         duration_min = max(45, round((dist_km / 720.0) * 60.0 + 35.0))
         base_fare_pp = max(2800, round(2200 + (dist_km * 3.8) + 450))
+        return dep_code, arr_code, duration_min, base_fare_pp
+
+    def search_flights(
+        self,
+        origin: str,
+        destination: str,
+        departure_date: str,
+        return_date: str | None = None,
+        adults: int = 1,
+        currency: str = "INR",
+        trip_type: str | None = None,
+    ) -> dict[str, Any]:
+        """Search flight routes and calculate realistic flight schedules and fares."""
+        dep_code, arr_code, duration_min, base_fare_pp = self._compute_route_metrics(origin, destination)
+        adults = max(1, int(adults))
+        is_round_trip = (trip_type in ("round_trip", "roundtrip")) or bool(return_date)
 
         outbound: list[dict[str, Any]] = []
         for i, carrier in enumerate(self.DOMESTIC_AIRLINES[:3]):
@@ -249,7 +265,8 @@ class TravelTools:
             arr_dt = dep_dt + timedelta(minutes=duration_min)
 
             price_pp = round(base_fare_pp * factor + (i * 150))
-            flight_no = f"{code}-{100 + (hash(f'{dep_code}{arr_code}{i}') % 899)}"
+            seed = sum(ord(c) for c in f"{dep_code}{arr_code}")
+            flight_no = f"{code}-{100 + ((seed * 31 + i * 19) % 899)}"
 
             outbound.append({
                 "airline": name,
@@ -283,6 +300,85 @@ class TravelTools:
             "travellers": adults,
             "currency": currency,
             "options": outbound,
+        }
+
+    def search_weekly_flights(
+        self,
+        origin: str,
+        destination: str,
+        start_date: str,
+        adults: int = 1,
+        days: int = 7,
+        currency: str = "INR",
+    ) -> dict[str, Any]:
+        """Search one-way flights across a flexible 7-day window starting at start_date."""
+        dep_code, arr_code, duration_min, base_fare_pp = self._compute_route_metrics(origin, destination)
+        adults = max(1, int(adults))
+        days = max(1, min(int(days), 7))
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+
+        daily_schedule: list[dict[str, Any]] = []
+        cheapest_overall: dict[str, Any] | None = None
+
+        for offset in range(days):
+            cur_dt = start_dt + timedelta(days=offset)
+            cur_date_str = cur_dt.strftime("%Y-%m-%d")
+            day_name = cur_dt.strftime("%A")
+            day_factor = self.WEEKDAY_PRICE_FACTORS.get(cur_dt.weekday(), 1.0)
+
+            day_flights: list[dict[str, Any]] = []
+            for idx, carrier in enumerate(self.DOMESTIC_AIRLINES[:3]):
+                slots: list[str] = carrier["slots"]  # type: ignore[assignment]
+                carrier_factor = float(str(carrier["factor"]))
+                code = str(carrier["code"])
+                name = str(carrier["name"])
+
+                slot = slots[(idx + offset) % len(slots)]
+                dep_dt = datetime.strptime(f"{cur_date_str} {slot}", "%Y-%m-%d %H:%M")
+                arr_dt = dep_dt + timedelta(minutes=duration_min)
+
+                price_pp = round(base_fare_pp * carrier_factor * day_factor + (idx * 120))
+                total_price = price_pp * adults
+                seed = sum(ord(c) for c in f"{dep_code}{arr_code}")
+                flight_no = f"{code}-{100 + ((seed * 37 + idx * 17 + offset * 13) % 899)}"
+
+                day_flights.append({
+                    "airline": name,
+                    "flight_no": flight_no,
+                    "dep": dep_dt.strftime("%H:%M"),
+                    "arr": arr_dt.strftime("%H:%M"),
+                    "dur": f"{duration_min // 60}h {duration_min % 60}m",
+                    "price": total_price,
+                })
+
+            day_flights.sort(key=lambda x: x["price"])
+            min_flight = day_flights[0]
+
+            if cheapest_overall is None or min_flight["price"] < cheapest_overall["price"]:
+                cheapest_overall = {
+                    "date": cur_date_str,
+                    "day": day_name,
+                    "airline": min_flight["airline"],
+                    "flight_no": min_flight["flight_no"],
+                    "dep": min_flight["dep"],
+                    "price": min_flight["price"],
+                }
+
+            daily_schedule.append({
+                "date": cur_date_str,
+                "day": day_name,
+                "lowest_fare": min_flight["price"],
+                "flights": day_flights,
+            })
+
+        return {
+            "route": f"{dep_code} to {arr_code}",
+            "trip_type": "one_way_7day_flexible",
+            "window": f"{start_date} to {(start_dt + timedelta(days=days - 1)).strftime('%Y-%m-%d')}",
+            "travellers": adults,
+            "currency": currency,
+            "cheapest_option": cheapest_overall,
+            "daily_flights": daily_schedule,
         }
 
     def search_hotels(
@@ -437,6 +533,7 @@ class TravelTools:
         """Dispatch requested tool execution safely."""
         dispatch = {
             "search_flights": self.search_flights,
+            "search_weekly_flights": self.search_weekly_flights,
             "search_hotels": self.search_hotels,
             "search_restaurants": self.search_restaurants,
             "search_attractions": self.search_attractions,
