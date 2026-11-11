@@ -74,7 +74,7 @@ INDIAN_CITIES = {
     "Visakhapatnam": "Visakhapatnam",
 }
 
-# Cities with multiple commercial or regional airports
+# Cities with multiple active commercial passenger airports
 MULTI_AIRPORT_CITIES: dict[str, list[dict[str, str]]] = {
     "Goa": [
         {"code": "GOI", "name": "Dabolim Airport (GOI - South Goa)"},
@@ -87,14 +87,6 @@ MULTI_AIRPORT_CITIES: dict[str, list[dict[str, str]]] = {
     "Mumbai": [
         {"code": "BOM", "name": "Chhatrapati Shivaji Maharaj Intl (BOM)"},
         {"code": "NMI", "name": "Navi Mumbai Intl (NMI)"},
-    ],
-    "Hyderabad": [
-        {"code": "HYD", "name": "Rajiv Gandhi Intl Shamshabad (HYD)"},
-        {"code": "BPM", "name": "Begumpet Airport (BPM)"},
-    ],
-    "Bengaluru": [
-        {"code": "BLR", "name": "Kempegowda Intl (BLR - Terminal 1/2)"},
-        {"code": "HAL", "name": "HAL Airport (HAL)"},
     ],
 }
 

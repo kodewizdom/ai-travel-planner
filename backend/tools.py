@@ -1,9 +1,14 @@
-"""Travel search tools: Indian Flights, Hotels, Attractions, and Restaurants."""
+"""Travel search tools: Live Google Flights (fli) + SerpApi backup, Hotels, Attractions, and Restaurants."""
 
 from __future__ import annotations
 
+import json
 import math
+import os
+import re
+import time
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -11,6 +16,73 @@ import airportsdata
 import requests
 
 from log import log_step
+
+try:
+    from fli.models import Airport, FlightSearchFilters, FlightSegment, PassengerInfo, TripType
+    from fli.search import SearchFlights
+    HAS_FLI = True
+except Exception:
+    HAS_FLI = False
+try:
+    from curl_cffi import requests as curl_requests
+    from fli.models import Airport, FlightSearchFilters, FlightSegment, PassengerInfo, TripType
+    from fli.search import SearchFlights
+    from fli.search._decoders import parse_flight_row
+    HAS_FLI = True
+except Exception:
+    HAS_FLI = False
+
+
+INDIAN_CITY_AIRPORTS: dict[str, str] = {
+    "agra": "AGR",
+    "ahmedabad": "AMD",
+    "amritsar": "ATQ",
+    "bengaluru": "BLR",
+    "bangalore": "BLR",
+    "bhopal": "BHO",
+    "bhubaneswar": "BBI",
+    "chandigarh": "IXC",
+    "chennai": "MAA",
+    "coimbatore": "CJB",
+    "dehradun": "DED",
+    "delhi": "DEL",
+    "new delhi": "DEL",
+    "goa": "GOI",
+    "guwahati": "GAU",
+    "hyderabad": "HYD",
+    "indore": "IDR",
+    "jaipur": "JAI",
+    "jammu": "IXJ",
+    "kochi": "COK",
+    "cochin": "COK",
+    "kolkata": "CCU",
+    "calcutta": "CCU",
+    "lucknow": "LKO",
+    "madurai": "IXM",
+    "mangaluru": "IXE",
+    "mangalore": "IXE",
+    "mumbai": "BOM",
+    "bombay": "BOM",
+    "mysuru": "MYQ",
+    "mysore": "MYQ",
+    "nagpur": "NAG",
+    "patna": "PAT",
+    "pune": "PNQ",
+    "raipur": "RPR",
+    "ranchi": "IXR",
+    "srinagar": "SXR",
+    "surat": "STV",
+    "thiruvananthapuram": "TRV",
+    "trivandrum": "TRV",
+    "tiruchirappalli": "TRZ",
+    "trichy": "TRZ",
+    "udaipur": "UDR",
+    "vadodara": "BDQ",
+    "baroda": "BDQ",
+    "varanasi": "VNS",
+    "visakhapatnam": "VTZ",
+    "vizag": "VTZ",
+}
 
 
 TOP_INDIAN_DESTINATIONS: dict[str, dict[str, Any]] = {
@@ -114,43 +186,56 @@ NEAR_AIRPORT_HOTELS: dict[str, list[dict[str, Any]]] = {
 
 
 class TravelTools:
-    """Provides travel search tools without requiring third-party subscriptions."""
+    """Provides travel search tools powered by live Google Flights (fli) with SerpApi backup."""
 
     PHOTON_URL = "https://photon.komoot.io/api/"
     WIKIPEDIA_REST_URL = "https://en.wikipedia.org/api/rest_v1/page/summary/"
-
-    DOMESTIC_AIRLINES = [
-        {"name": "IndiGo", "code": "6E", "factor": 1.0, "slots": ["06:15", "09:30", "14:15", "18:45"]},
-        {"name": "Air India", "code": "AI", "factor": 1.15, "slots": ["07:45", "11:20", "16:40", "19:50"]},
-        {"name": "Akasa Air", "code": "QP", "factor": 0.95, "slots": ["08:10", "13:00", "17:30"]},
-        {"name": "SpiceJet", "code": "SG", "factor": 0.92, "slots": ["05:50", "12:15", "20:00"]},
-    ]
+    SERPAPI_URL = "https://serpapi.com/search.json"
+    CACHE_TTL_SEC = 3600  # 1-hour cache to minimize duplicate external requests
 
     def __init__(self, timeout: int = 15):
         self.timeout = timeout
         self.airports = airportsdata.load("IATA")
+        self._flight_cache: dict[tuple[Any, ...], tuple[float, dict[str, Any]]] = {}
+
+    def _get_cached(self, key: tuple[Any, ...]) -> dict[str, Any] | None:
+        entry = self._flight_cache.get(key)
+        if not entry:
+            return None
+        ts, val = entry
+        if time.time() - ts <= self.CACHE_TTL_SEC:
+            return val
+        self._flight_cache.pop(key, None)
+        return None
+
+    def _set_cached(self, key: tuple[Any, ...], value: dict[str, Any]) -> None:
+        self._flight_cache[key] = (time.time(), value)
 
     def resolve_airport_code(self, place: str) -> str:
-        """Resolve a city or airport name to an IATA 3-letter code."""
+        """Resolve an Indian city or airport name (or 'City (CODE)') to an IATA 3-letter code."""
         value = place.strip()
-        if len(value) == 3 and value.isalpha():
+        paren_match = re.search(r"\(([A-Za-z]{3})\)", value)
+        if paren_match:
+            return paren_match.group(1).upper()
+
+        needle = value.split(",")[0].strip().casefold()
+        if needle in INDIAN_CITY_AIRPORTS:
+            return INDIAN_CITY_AIRPORTS[needle]
+
+        if len(value) == 3 and value.isalpha() and value.upper() in self.airports:
             return value.upper()
 
-        needle = value.casefold()
-        matches: list[tuple[str, Any]] = []
+        in_matches: list[tuple[str, Any]] = []
+        global_matches: list[tuple[str, Any]] = []
         for code, airport in self.airports.items():
             city = str(getattr(airport, "city", "") if not isinstance(airport, dict) else airport.get("city", "")).casefold()
             name = str(getattr(airport, "name", "") if not isinstance(airport, dict) else airport.get("name", "")).casefold()
-            if needle == city or needle == name:
-                matches.append((code, airport))
+            country = str(getattr(airport, "country", "") if not isinstance(airport, dict) else airport.get("country", "")).upper()
+            if needle == city or needle == name or needle in city or needle in name:
+                target = in_matches if country == "IN" else global_matches
+                target.append((code, airport))
 
-        if not matches:
-            for code, airport in self.airports.items():
-                city = str(getattr(airport, "city", "") if not isinstance(airport, dict) else airport.get("city", "")).casefold()
-                name = str(getattr(airport, "name", "") if not isinstance(airport, dict) else airport.get("name", "")).casefold()
-                if needle in city or needle in name:
-                    matches.append((code, airport))
-
+        matches = in_matches or global_matches
         if not matches:
             raise ValueError(f"Could not identify an airport for '{place}'. Please enter the 3-letter IATA code.")
 
@@ -210,22 +295,16 @@ class TravelTools:
             pass
         return f"{clean.title()} is one of India's prominent travel destinations."
 
-    # Day-of-week demand pricing multipliers (0=Monday ... 6=Sunday)
-    WEEKDAY_PRICE_FACTORS: dict[int, float] = {
-        0: 0.96,  # Monday
-        1: 0.86,  # Tuesday (midweek dip)
-        2: 0.88,  # Wednesday
-        3: 0.94,  # Thursday
-        4: 1.15,  # Friday (weekend rush)
-        5: 1.08,  # Saturday
-        6: 1.20,  # Sunday (peak rush)
-    }
+    def _google_flights_url(self, dep_code: str, arr_code: str, departure_date: str, return_date: str | None = None) -> str:
+        """Generate direct Google Flights verification URL."""
+        if return_date:
+            q = f"Flights to {arr_code} from {dep_code} on {departure_date} through {return_date}"
+        else:
+            q = f"One way flights to {arr_code} from {dep_code} on {departure_date}"
+        return f"https://www.google.com/travel/flights?q={urllib.parse.quote(q)}&curr=INR"
 
-    def _compute_route_metrics(self, origin: str, destination: str) -> tuple[str, str, int, int]:
-        """Resolve airport codes and calculate flight duration (min) and base fare (INR)."""
-        dep_code = self.resolve_airport_code(origin)
-        arr_code = self.resolve_airport_code(destination)
-
+    def _compute_distance_estimate(self, dep_code: str, arr_code: str) -> tuple[int, int]:
+        """Fallback duration (minutes) and approximate INR fare when live sources are unreachable."""
         dep_info: Any = self.airports.get(dep_code, {})
         arr_info: Any = self.airports.get(arr_code, {})
         lat1 = float(getattr(dep_info, "lat", 20.0) if not isinstance(dep_info, dict) else dep_info.get("lat", 20.0))
@@ -233,10 +312,322 @@ class TravelTools:
         lat2 = float(getattr(arr_info, "lat", 20.0) if not isinstance(arr_info, dict) else arr_info.get("lat", 20.0))
         lon2 = float(getattr(arr_info, "lon", 78.0) if not isinstance(arr_info, dict) else arr_info.get("lon", 78.0))
         dist_km = self._haversine_distance_km(lat1, lon1, lat2, lon2)
-
         duration_min = max(45, round((dist_km / 720.0) * 60.0 + 35.0))
         base_fare_pp = max(2800, round(2200 + (dist_km * 3.8) + 450))
-        return dep_code, arr_code, duration_min, base_fare_pp
+        return duration_min, base_fare_pp
+
+    def _fli_search_leg(
+        self,
+        dep_code: str,
+        arr_code: str,
+        travel_date: str,
+        adults: int = 1,
+        currency: str = "INR",
+        limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        """Query live one-way flights via Google Flights (fli). Returns formatted flight list."""
+        if not HAS_FLI:
+            raise RuntimeError("flights (fli) library not available")
+        dep_enum = getattr(Airport, dep_code, None)
+        arr_enum = getattr(Airport, arr_code, None)
+        if dep_enum is None or arr_enum is None:
+            raise ValueError(f"Airport code unsupported by fli: {dep_code} -> {arr_code}")
+
+        filters = FlightSearchFilters(
+            passenger_info=PassengerInfo(adults=max(1, int(adults))),
+            flight_segments=[
+                FlightSegment(
+                    departure_airport=[[dep_enum, 0]],
+                    arrival_airport=[[arr_enum, 0]],
+                    travel_date=travel_date,
+                )
+            ],
+            trip_type=TripType.ONE_WAY,
+        )
+        raw_results = SearchFlights().search(filters, currency=currency, country="IN")
+        valid = [r for r in (raw_results or []) if getattr(r, "price", None) and r.price > 0 and getattr(r, "legs", None)]
+        valid.sort(key=lambda r: (r.price, r.stops))
+
+        formatted: list[dict[str, Any]] = []
+        for r in valid[:limit]:
+            legs = r.legs
+            airlines = ", ".join(dict.fromkeys(l.airline.value for l in legs))
+            flight_nums = " / ".join(f"{l.airline.name.lstrip('_')}-{l.flight_number}" for l in legs)
+            dep_str = legs[0].departure_datetime.strftime("%H:%M")
+            arr_str = legs[-1].arrival_datetime.strftime("%H:%M")
+            dur_str = f"{r.duration // 60}h {r.duration % 60}m"
+            stops_label = "Non-stop" if r.stops == 0 else f"{r.stops} stop{'s' if r.stops > 1 else ''}"
+
+            formatted.append({
+                "airline": airlines,
+                "flight_number": flight_nums,
+                "departure": dep_str,
+                "arrival": arr_str,
+                "duration": dur_str,
+                "stops": stops_label,
+                "price": int(round(r.price)),
+            })
+        return formatted
+
+    def _serpapi_search_leg(
+        self,
+        dep_code: str,
+        arr_code: str,
+        travel_date: str,
+        adults: int = 1,
+        currency: str = "INR",
+        limit: int = 5,
+    ) -> list[dict[str, Any]] | None:
+        """Backup live Google Flights query using SerpApi when configured via SERPAPI_API_KEY."""
+        api_key = os.getenv("SERPAPI_API_KEY", "").strip()
+        if not api_key:
+            return None
+
+        params = {
+            "engine": "google_flights",
+            "departure_id": dep_code,
+            "arrival_id": arr_code,
+            "outbound_date": travel_date,
+            "type": "2",  # one-way
+            "adults": str(max(1, int(adults))),
+            "currency": currency,
+            "gl": "in",
+            "hl": "en",
+            "api_key": api_key,
+        }
+        r = requests.get(self.SERPAPI_URL, params=params, timeout=self.timeout)
+        r.raise_for_status()
+        data = r.json()
+        raw_items = (data.get("best_flights") or []) + (data.get("other_flights") or [])
+        formatted: list[dict[str, Any]] = []
+        for item in raw_items:
+            price = item.get("price")
+            legs = item.get("flights") or []
+            if not price or not legs:
+                continue
+            airlines = ", ".join(dict.fromkeys(str(l.get("airline", "")) for l in legs if l.get("airline")))
+            flight_nums = " / ".join(str(l.get("flight_number", "")) for l in legs if l.get("flight_number"))
+            dep_time = str(legs[0].get("departure_airport", {}).get("time", ""))[-5:]
+            arr_time = str(legs[-1].get("arrival_airport", {}).get("time", ""))[-5:]
+            dur_min = int(item.get("total_duration") or 0)
+            stops = max(0, len(legs) - 1)
+            formatted.append({
+                "airline": airlines,
+                "flight_number": flight_nums,
+                "departure": dep_time,
+                "arrival": arr_time,
+                "duration": f"{dur_min // 60}h {dur_min % 60}m" if dur_min else "",
+                "stops": "Non-stop" if stops == 0 else f"{stops} stop{'s' if stops > 1 else ''}",
+                "price": int(round(float(price))),
+            })
+        formatted.sort(key=lambda x: x["price"])
+        return formatted[:limit]
+
+    def _fetch_leg_with_backup(
+        self,
+        dep_code: str,
+        arr_code: str,
+        travel_date: str,
+        adults: int,
+        currency: str,
+        limit: int = 5,
+    ) -> tuple[list[dict[str, Any]], str, bool]:
+        """Try primary fli Google Flights, then SerpApi backup. Returns (flights, source_name, live_ok)."""
+        try:
+            options = self._fli_search_leg(dep_code, arr_code, travel_date, adults, currency, limit)
+            if options:
+                return options, "Google Flights (Live)", True
+            # Confirm 0 flights if SerpApi backup is set; otherwise report 0 flights honestly
+            backup = self._serpapi_search_leg(dep_code, arr_code, travel_date, adults, currency, limit)
+            if backup is not None:
+                return backup, "SerpApi Google Flights (Live)", True
+            return [], "Google Flights (Live)", True
+        except Exception as err:
+            log_step("fli_fallback", f"{dep_code}->{arr_code} {travel_date}: {err}")
+            try:
+                backup = self._serpapi_search_leg(dep_code, arr_code, travel_date, adults, currency, limit)
+                if backup is not None:
+                    return backup, "SerpApi Google Flights (Live Backup)", True
+            except Exception as b_err:
+                log_step("serpapi_error", str(b_err))
+            return [], "Unavailable", False
+
+    def _format_fli_results(self, raw_results: list[Any], limit: int = 5) -> list[dict[str, Any]]:
+        """Format raw fli FlightResult objects into compact sorted dictionaries."""
+        valid = [r for r in (raw_results or []) if getattr(r, "price", None) and r.price > 0 and getattr(r, "legs", None)]
+        valid.sort(key=lambda r: (r.price, r.stops))
+
+        formatted: list[dict[str, Any]] = []
+        for r in valid[:limit]:
+            legs = r.legs
+            airlines = ", ".join(dict.fromkeys(l.airline.value for l in legs))
+            flight_nums = " / ".join(f"{l.airline.name.lstrip('_')}-{l.flight_number}" for l in legs)
+            dep_str = legs[0].departure_datetime.strftime("%H:%M")
+            arr_str = legs[-1].arrival_datetime.strftime("%H:%M")
+            dur_str = f"{r.duration // 60}h {r.duration % 60}m"
+            stops_label = "Non-stop" if r.stops == 0 else f"{r.stops} stop{'s' if r.stops > 1 else ''}"
+
+            formatted.append({
+                "airline": airlines,
+                "flight_number": flight_nums,
+                "departure": dep_str,
+                "arrival": arr_str,
+                "duration": dur_str,
+                "stops": stops_label,
+                "price": int(round(r.price)),
+            })
+        return formatted
+
+    def _fli_html_search_leg(
+        self,
+        dep_code: str,
+        arr_code: str,
+        travel_date: str,
+        adults: int = 1,
+        currency: str = "INR",
+        limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        """Query Google Flights search page HTML ds:1 block using curl_cffi and fli decoder."""
+        pax_str = "1+adult" if int(adults) <= 1 else f"{int(adults)}+adults"
+        q = f"One+way+flights+to+{arr_code}+from+{dep_code}+on+{travel_date}+{pax_str}"
+        url = f"https://www.google.com/travel/flights?q={q}&curr={currency}&gl=IN"
+        r = curl_requests.get(url, impersonate="chrome", timeout=self.timeout)
+        r.raise_for_status()
+
+        scripts = re.findall(r"AF_initDataCallback\(\{key:\s*'ds:1'.*?data:(.*?),\s*sideChannel:", r.text, re.S)
+        if not scripts:
+            return []
+
+        data = json.loads(scripts[0])
+        rows = [item for i in (2, 3) if len(data) > i and isinstance(data[i], list) and data[i] for item in data[i][0]]
+        parsed = []
+        for row in rows:
+            try:
+                parsed.append(parse_flight_row(row))
+            except Exception:
+                continue
+        return self._format_fli_results(parsed, limit=limit)
+
+    def _fli_search_leg(
+        self,
+        dep_code: str,
+        arr_code: str,
+        travel_date: str,
+        adults: int = 1,
+        currency: str = "INR",
+        limit: int = 5,
+    ) -> list[dict[str, Any]]:
+        """Query live one-way flights via fli RPC, automatically falling back to Google Flights HTML ds:1."""
+        if not HAS_FLI:
+            raise RuntimeError("flights (fli) library not available")
+        dep_enum = getattr(Airport, dep_code, None)
+        arr_enum = getattr(Airport, arr_code, None)
+        if dep_enum is None or arr_enum is None:
+            raise ValueError(f"Airport code unsupported by fli: {dep_code} -> {arr_code}")
+
+        try:
+            filters = FlightSearchFilters(
+                passenger_info=PassengerInfo(adults=max(1, int(adults))),
+                flight_segments=[
+                    FlightSegment(
+                        departure_airport=[[dep_enum, 0]],
+                        arrival_airport=[[arr_enum, 0]],
+                        travel_date=travel_date,
+                    )
+                ],
+                trip_type=TripType.ONE_WAY,
+            )
+            raw_results = SearchFlights().search(filters, currency=currency, country="IN")
+            formatted = self._format_fli_results(raw_results or [], limit=limit)
+            if formatted:
+                return formatted
+        except Exception as rpc_err:
+            log_step("fli_rpc_retry_html", str(rpc_err))
+
+        return self._fli_html_search_leg(dep_code, arr_code, travel_date, adults, currency, limit)
+
+    def _serpapi_search_leg(
+        self,
+        dep_code: str,
+        arr_code: str,
+        travel_date: str,
+        adults: int = 1,
+        currency: str = "INR",
+        limit: int = 5,
+    ) -> list[dict[str, Any]] | None:
+        """Backup live Google Flights query using SerpApi when configured via SERPAPI_API_KEY."""
+        api_key = os.getenv("SERPAPI_API_KEY", "").strip()
+        if not api_key:
+            return None
+
+        params = {
+            "engine": "google_flights",
+            "departure_id": dep_code,
+            "arrival_id": arr_code,
+            "outbound_date": travel_date,
+            "type": "2",  # one-way
+            "adults": str(max(1, int(adults))),
+            "currency": currency,
+            "gl": "in",
+            "hl": "en",
+            "api_key": api_key,
+        }
+        r = requests.get(self.SERPAPI_URL, params=params, timeout=self.timeout)
+        r.raise_for_status()
+        data = r.json()
+        raw_items = (data.get("best_flights") or []) + (data.get("other_flights") or [])
+        formatted: list[dict[str, Any]] = []
+        for item in raw_items:
+            price = item.get("price")
+            legs = item.get("flights") or []
+            if not price or not legs:
+                continue
+            airlines = ", ".join(dict.fromkeys(str(l.get("airline", "")) for l in legs if l.get("airline")))
+            flight_nums = " / ".join(str(l.get("flight_number", "")) for l in legs if l.get("flight_number"))
+            dep_time = str(legs[0].get("departure_airport", {}).get("time", ""))[-5:]
+            arr_time = str(legs[-1].get("arrival_airport", {}).get("time", ""))[-5:]
+            dur_min = int(item.get("total_duration") or 0)
+            stops = max(0, len(legs) - 1)
+            formatted.append({
+                "airline": airlines,
+                "flight_number": flight_nums,
+                "departure": dep_time,
+                "arrival": arr_time,
+                "duration": f"{dur_min // 60}h {dur_min % 60}m" if dur_min else "",
+                "stops": "Non-stop" if stops == 0 else f"{stops} stop{'s' if stops > 1 else ''}",
+                "price": int(round(float(price))),
+            })
+        formatted.sort(key=lambda x: x["price"])
+        return formatted[:limit]
+
+    def _fetch_leg_with_backup(
+        self,
+        dep_code: str,
+        arr_code: str,
+        travel_date: str,
+        adults: int,
+        currency: str,
+        limit: int = 5,
+    ) -> tuple[list[dict[str, Any]], str, bool]:
+        """Try primary fli Google Flights, then SerpApi backup. Returns (flights, source_name, live_ok)."""
+        try:
+            options = self._fli_search_leg(dep_code, arr_code, travel_date, adults, currency, limit)
+            if options:
+                return options, "Google Flights (Live)", True
+            # Confirm 0 flights if SerpApi backup is set; otherwise report 0 flights honestly
+            backup = self._serpapi_search_leg(dep_code, arr_code, travel_date, adults, currency, limit)
+            if backup is not None:
+                return backup, "SerpApi Google Flights (Live)", True
+            return [], "Google Flights (Live)", True
+        except Exception as err:
+            log_step("fli_fallback", f"{dep_code}->{arr_code} {travel_date}: {err}")
+            try:
+                backup = self._serpapi_search_leg(dep_code, arr_code, travel_date, adults, currency, limit)
+                if backup is not None:
+                    return backup, "SerpApi Google Flights (Live Backup)", True
+            except Exception as b_err:
+                log_step("serpapi_error", str(b_err))
+            return [], "Unavailable", False
 
     def search_flights(
         self,
@@ -248,59 +639,112 @@ class TravelTools:
         currency: str = "INR",
         trip_type: str | None = None,
     ) -> dict[str, Any]:
-        """Search flight routes and calculate realistic flight schedules and fares."""
-        dep_code, arr_code, duration_min, base_fare_pp = self._compute_route_metrics(origin, destination)
+        """Search live flights with fli primary, SerpApi backup, and honest fallback."""
+        dep_code = self.resolve_airport_code(origin)
+        arr_code = self.resolve_airport_code(destination)
         adults = max(1, int(adults))
         is_round_trip = (trip_type in ("round_trip", "roundtrip")) or bool(return_date)
 
-        outbound: list[dict[str, Any]] = []
-        for i, carrier in enumerate(self.DOMESTIC_AIRLINES[:3]):
-            slots: list[str] = carrier["slots"]  # type: ignore[assignment]
-            factor: float = float(str(carrier["factor"]))
-            code: str = str(carrier["code"])
-            name: str = str(carrier["name"])
+        cache_key = ("single", dep_code, arr_code, departure_date, return_date if is_round_trip else None, adults, currency)
+        cached = self._get_cached(cache_key)
+        if cached:
+            log_step("flight_cache_hit", f"{dep_code}->{arr_code}")
+            return cached
 
-            slot = slots[i % len(slots)]
-            dep_dt = datetime.strptime(f"{departure_date} {slot}", "%Y-%m-%d %H:%M")
-            arr_dt = dep_dt + timedelta(minutes=duration_min)
+        verify_url = self._google_flights_url(dep_code, arr_code, departure_date, return_date if is_round_trip else None)
+        outbound, data_source, live_ok = self._fetch_leg_with_backup(dep_code, arr_code, departure_date, adults, currency, limit=5)
 
-            price_pp = round(base_fare_pp * factor + (i * 150))
-            seed = sum(ord(c) for c in f"{dep_code}{arr_code}")
-            flight_no = f"{code}-{100 + ((seed * 31 + i * 19) % 899)}"
+        if live_ok and not outbound:
+            result = {
+                "route": f"{dep_code} to {arr_code}",
+                "status": "no_flights_found",
+                "data_source": data_source,
+                "trip_type": "round_trip" if is_round_trip else "one_way",
+                "departure_date": departure_date,
+                "return_date": return_date if is_round_trip else None,
+                "travellers": adults,
+                "currency": currency,
+                "message": f"No scheduled commercial flights found on Google Flights for {dep_code} to {arr_code} on {departure_date}.",
+                "booking_link": verify_url,
+                "options": [],
+            }
+            self._set_cached(cache_key, result)
+            return result
 
-            outbound.append({
-                "airline": name,
-                "flight_number": flight_no,
-                "departure": dep_dt.strftime("%H:%M"),
-                "arrival": arr_dt.strftime("%H:%M"),
-                "duration": f"{duration_min // 60}h {duration_min % 60}m",
-                "price": price_pp * adults,
-            })
-
-        outbound.sort(key=lambda x: x["price"])
+        if not live_ok:
+            duration_min, base_fare_pp = self._compute_distance_estimate(dep_code, arr_code)
+            est_price = base_fare_pp * adults
+            est_opt: dict[str, Any] = {
+                "airline": "Estimated Domestic Fare (Verify Live)",
+                "flight_number": "Unverified",
+                "departure": "Varies",
+                "arrival": "Varies",
+                "duration": f"~{duration_min // 60}h {duration_min % 60}m",
+                "stops": "Non-stop / Connecting",
+                "price": est_price,
+            }
+            if is_round_trip and return_date:
+                est_opt["round_trip_price_total"] = est_price * 2
+            return {
+                "route": f"{dep_code} to {arr_code}",
+                "status": "estimated_only",
+                "data_source": "Offline Estimate (Live search temporarily unreachable)",
+                "trip_type": "round_trip" if is_round_trip else "one_way",
+                "departure_date": departure_date,
+                "return_date": return_date if is_round_trip else None,
+                "travellers": adults,
+                "currency": currency,
+                "booking_link": verify_url,
+                "options": [est_opt],
+            }
 
         if is_round_trip and return_date:
-            ret_slot = "15:30"
-            ret_dep_dt = datetime.strptime(f"{return_date} {ret_slot}", "%Y-%m-%d %H:%M")
-            ret_arr_dt = ret_dep_dt + timedelta(minutes=duration_min)
-            for opt in outbound:
-                opt["return_flight"] = {
-                    "airline": opt["airline"],
-                    "departure": ret_dep_dt.strftime("%H:%M"),
-                    "arrival": ret_arr_dt.strftime("%H:%M"),
-                    "duration": f"{duration_min // 60}h {duration_min % 60}m",
+            ret_opts, _, ret_ok = self._fetch_leg_with_backup(arr_code, dep_code, return_date, adults, currency, limit=3)
+            if ret_ok and ret_opts:
+                best_ret = ret_opts[0]
+                for opt in outbound:
+                    opt["return_flight"] = {
+                        "airline": best_ret["airline"],
+                        "flight_number": best_ret["flight_number"],
+                        "departure": best_ret["departure"],
+                        "arrival": best_ret["arrival"],
+                        "duration": best_ret["duration"],
+                        "stops": best_ret["stops"],
+                        "price": best_ret["price"],
+                    }
+                    opt["round_trip_price_total"] = opt["price"] + best_ret["price"]
+                outbound[0]["return_options"] = ret_opts
+            elif ret_ok and not ret_opts:
+                result = {
+                    "route": f"{dep_code} to {arr_code}",
+                    "status": "no_return_flights_found",
+                    "data_source": data_source,
+                    "trip_type": "round_trip",
+                    "departure_date": departure_date,
+                    "return_date": return_date,
+                    "travellers": adults,
+                    "currency": currency,
+                    "message": f"Outbound flights exist on {departure_date}, but no return flights were found for {arr_code} to {dep_code} on {return_date}.",
+                    "booking_link": verify_url,
+                    "options": outbound,
                 }
-                opt["round_trip_price_total"] = opt["price"] * 2
+                self._set_cached(cache_key, result)
+                return result
 
-        return {
+        result = {
             "route": f"{dep_code} to {arr_code}",
+            "status": "ok",
+            "data_source": data_source,
             "trip_type": "round_trip" if is_round_trip else "one_way",
             "departure_date": departure_date,
             "return_date": return_date if is_round_trip else None,
             "travellers": adults,
             "currency": currency,
+            "booking_link": verify_url,
             "options": outbound,
         }
+        self._set_cached(cache_key, result)
+        return result
 
     def search_weekly_flights(
         self,
@@ -311,75 +755,113 @@ class TravelTools:
         days: int = 7,
         currency: str = "INR",
     ) -> dict[str, Any]:
-        """Search one-way flights across a flexible 7-day window starting at start_date."""
-        dep_code, arr_code, duration_min, base_fare_pp = self._compute_route_metrics(origin, destination)
+        """Search live one-way flights and fares across a 7-day window from start_date."""
+        dep_code = self.resolve_airport_code(origin)
+        arr_code = self.resolve_airport_code(destination)
         adults = max(1, int(adults))
         days = max(1, min(int(days), 7))
         start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        date_list = [(start_dt + timedelta(days=offset)).strftime("%Y-%m-%d") for offset in range(days)]
+
+        cache_key = ("weekly", dep_code, arr_code, start_date, days, adults, currency)
+        cached = self._get_cached(cache_key)
+        if cached:
+            log_step("weekly_cache_hit", f"{dep_code}->{arr_code}")
+            return cached
+
+        verify_url = self._google_flights_url(dep_code, arr_code, start_date)
+
+        def fetch_day(d_str: str) -> tuple[str, list[dict[str, Any]], str, bool]:
+            opts, src, ok = self._fetch_leg_with_backup(dep_code, arr_code, d_str, adults, currency, limit=3)
+            return d_str, opts, src, ok
+
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            day_results = list(executor.map(fetch_day, date_list))
+
+        any_live_ok = any(ok for _, _, _, ok in day_results)
+        any_flights = any(len(opts) > 0 for _, opts, _, _ in day_results)
+        primary_source = next((src for _, opts, src, ok in day_results if ok and opts), "Google Flights (Live)")
+
+        if any_live_ok and not any_flights:
+            result = {
+                "route": f"{dep_code} to {arr_code}",
+                "status": "no_flights_found",
+                "data_source": primary_source,
+                "trip_type": "one_way_7day_flexible",
+                "window": f"{date_list[0]} to {date_list[-1]}",
+                "travellers": adults,
+                "currency": currency,
+                "message": f"No scheduled commercial flights found on Google Flights for {dep_code} to {arr_code} between {date_list[0]} and {date_list[-1]}.",
+                "booking_link": verify_url,
+                "cheapest_option": None,
+                "daily_flights": [],
+            }
+            self._set_cached(cache_key, result)
+            return result
+
+        if not any_live_ok:
+            duration_min, base_fare_pp = self._compute_distance_estimate(dep_code, arr_code)
+            return {
+                "route": f"{dep_code} to {arr_code}",
+                "status": "estimated_only",
+                "data_source": "Offline Estimate (Live search temporarily unreachable)",
+                "trip_type": "one_way_7day_flexible",
+                "window": f"{date_list[0]} to {date_list[-1]}",
+                "travellers": adults,
+                "currency": currency,
+                "estimated_fare_per_person": base_fare_pp,
+                "estimated_duration": f"~{duration_min // 60}h {duration_min % 60}m",
+                "booking_link": verify_url,
+                "daily_flights": [],
+            }
 
         daily_schedule: list[dict[str, Any]] = []
         cheapest_overall: dict[str, Any] | None = None
 
-        for offset in range(days):
-            cur_dt = start_dt + timedelta(days=offset)
-            cur_date_str = cur_dt.strftime("%Y-%m-%d")
-            day_name = cur_dt.strftime("%A")
-            day_factor = self.WEEKDAY_PRICE_FACTORS.get(cur_dt.weekday(), 1.0)
-
-            day_flights: list[dict[str, Any]] = []
-            for idx, carrier in enumerate(self.DOMESTIC_AIRLINES[:3]):
-                slots: list[str] = carrier["slots"]  # type: ignore[assignment]
-                carrier_factor = float(str(carrier["factor"]))
-                code = str(carrier["code"])
-                name = str(carrier["name"])
-
-                slot = slots[(idx + offset) % len(slots)]
-                dep_dt = datetime.strptime(f"{cur_date_str} {slot}", "%Y-%m-%d %H:%M")
-                arr_dt = dep_dt + timedelta(minutes=duration_min)
-
-                price_pp = round(base_fare_pp * carrier_factor * day_factor + (idx * 120))
-                total_price = price_pp * adults
-                seed = sum(ord(c) for c in f"{dep_code}{arr_code}")
-                flight_no = f"{code}-{100 + ((seed * 37 + idx * 17 + offset * 13) % 899)}"
-
-                day_flights.append({
-                    "airline": name,
-                    "flight_no": flight_no,
-                    "dep": dep_dt.strftime("%H:%M"),
-                    "arr": arr_dt.strftime("%H:%M"),
-                    "dur": f"{duration_min // 60}h {duration_min % 60}m",
-                    "price": total_price,
+        for d_str, opts, _, _ in day_results:
+            day_name = datetime.strptime(d_str, "%Y-%m-%d").strftime("%A")
+            if not opts:
+                daily_schedule.append({
+                    "date": d_str,
+                    "day": day_name,
+                    "lowest_fare": None,
+                    "flights": [],
                 })
+                continue
 
-            day_flights.sort(key=lambda x: x["price"])
-            min_flight = day_flights[0]
-
+            min_flight = opts[0]
             if cheapest_overall is None or min_flight["price"] < cheapest_overall["price"]:
                 cheapest_overall = {
-                    "date": cur_date_str,
+                    "date": d_str,
                     "day": day_name,
                     "airline": min_flight["airline"],
-                    "flight_no": min_flight["flight_no"],
-                    "dep": min_flight["dep"],
+                    "flight_number": min_flight["flight_number"],
+                    "departure": min_flight["departure"],
+                    "stops": min_flight["stops"],
                     "price": min_flight["price"],
                 }
 
             daily_schedule.append({
-                "date": cur_date_str,
+                "date": d_str,
                 "day": day_name,
                 "lowest_fare": min_flight["price"],
-                "flights": day_flights,
+                "flights": opts,
             })
 
-        return {
+        result = {
             "route": f"{dep_code} to {arr_code}",
+            "status": "ok",
+            "data_source": primary_source,
             "trip_type": "one_way_7day_flexible",
-            "window": f"{start_date} to {(start_dt + timedelta(days=days - 1)).strftime('%Y-%m-%d')}",
+            "window": f"{date_list[0]} to {date_list[-1]}",
             "travellers": adults,
             "currency": currency,
+            "booking_link": verify_url,
             "cheapest_option": cheapest_overall,
             "daily_flights": daily_schedule,
         }
+        self._set_cached(cache_key, result)
+        return result
 
     def search_hotels(
         self,
