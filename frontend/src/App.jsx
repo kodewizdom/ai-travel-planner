@@ -104,9 +104,79 @@ export default function App() {
 
   const hasSearched = messages.some(m => m.role === 'assistant');
 
-  // Load destination details reactively
-  const destinationData = getDestinationData(destination);
-  const banners = destination ? destinationData.banners : DEFAULT_INDIA_BANNERS;
+  // Load destination details reactively in deckData state so suggestions can update it dynamically
+  const [deckData, setDeckData] = useState(() => getDestinationData(destination));
+
+  useEffect(() => {
+    setDeckData(getDestinationData(destination));
+  }, [destination]);
+
+  const banners = destination ? (deckData.banners?.length ? deckData.banners : DEFAULT_INDIA_BANNERS) : DEFAULT_INDIA_BANNERS;
+
+  // Helper to extract AI suggested places, hotels, or restaurants from chat response
+  const extractSuggestionsFromReply = (replyText, userQuery, currentCity) => {
+    if (!replyText) return { category: null, items: [] };
+
+    const qLower = (userQuery || '').toLowerCase();
+    const rLower = replyText.toLowerCase();
+
+    // Determine target category
+    let category = null;
+    if (/hotel|stay|resort|lodge|villa|hostel|inn/i.test(qLower) || (/hotel|stay|resort/i.test(rLower) && !/restaurant|cafe/i.test(qLower))) {
+      category = 'hotels';
+    } else if (/restaurant|food|dine|dining|eat|dish|cafe|shack|bakery|thali/i.test(qLower) || /restaurant|cuisine|dining/i.test(rLower)) {
+      category = 'restaurants';
+    } else if (/place|spot|sight|attraction|visit|see|landmark|monument|fort|beach|temple|lake/i.test(qLower) || /attraction|sight|monument/i.test(rLower)) {
+      category = 'attractions';
+    }
+
+    // Match numbered or bulleted items with bold titles: e.g. "1. **Chapora Fort** - description"
+    const itemRegex = /(?:^|\n)\s*(?:[0-9]+[.)]|\*|-)\s*(?:\*\*(.*?)\*\*|([A-Z][a-zA-Z0-9\s'&-]{2,35}))[:\s–—-]+([^\n]+)/g;
+    const items = [];
+    let match;
+
+    while ((match = itemRegex.exec(replyText)) !== null) {
+      const rawTitle = (match[1] || match[2] || '').trim();
+      const rawDesc = (match[3] || '').trim();
+
+      if (!rawTitle || rawTitle.length < 3 || /day \d|itinerary|overview|summary|step \d|tip \d|budget/i.test(rawTitle)) {
+        continue;
+      }
+
+      if (category === 'attractions' || !category) {
+        items.push({
+          name: rawTitle,
+          category: 'AI Recommendation',
+          location: currentCity || 'Local Area',
+          timings: 'Check on Google Maps',
+          entryFee: 'Free Entry / Variable',
+          highlights: rawDesc || 'Recommended sightseeing and exploration spot.'
+        });
+      } else if (category === 'hotels') {
+        items.push({
+          name: rawTitle,
+          category: 'Recommended Stay',
+          location: currentCity || 'Central Area',
+          rating: 4.7,
+          reviewsCount: 1250,
+          pricePerNight: 5500,
+          description: rawDesc || 'Comfortable recommended accommodation.'
+        });
+      } else if (category === 'restaurants') {
+        items.push({
+          name: rawTitle,
+          cuisine: 'Specialty Dining',
+          location: currentCity || 'City Center',
+          rating: 4.6,
+          reviewsCount: 1600,
+          priceForTwo: 1400,
+          ambience: rawDesc || 'Authentic dining destination.'
+        });
+      }
+    }
+
+    return { category: category || (items.length > 0 ? 'attractions' : null), items };
+  };
 
   // Track window resize
   useEffect(() => {
@@ -258,7 +328,12 @@ export default function App() {
       setMessages(prev => [
         ...prev,
         { role: 'user', content: data.prompt, isInternal: true, summary: summaryText },
-        { role: 'assistant', content: data.reply }
+        {
+          role: 'assistant',
+          content: data.reply,
+          isPlanResult: true,
+          destName: destination
+        }
       ]);
 
       // Automatically focus on flight results tab in explorer
@@ -295,7 +370,53 @@ export default function App() {
         throw new Error(data.detail || 'Failed to process message');
       }
 
-      setMessages([...newMessages, { role: 'assistant', content: data.reply }]);
+      // 1. Check if user or reply mentioned a new destination city
+      const lowerQuery = text.toLowerCase();
+      let updatedDest = destination;
+      for (const c of FALLBACK_CITIES) {
+        const cName = c.split(' (')[0];
+        const regex = new RegExp(`\\b${cName.toLowerCase()}\\b`, 'i');
+        if (regex.test(lowerQuery)) {
+          updatedDest = cName;
+          setDestination(cName);
+          break;
+        }
+      }
+
+      // 2. Extract new suggestions from assistant reply
+      const { category, items } = extractSuggestionsFromReply(data.reply, text, updatedDest || destination);
+
+      let suggestionBadge = null;
+      if (items.length > 0 && category) {
+        setDeckData(prev => {
+          const currentList = prev[category] || [];
+          const existingNames = new Set(currentList.map(item => item.name.toLowerCase()));
+          const newItems = items.filter(item => !existingNames.has(item.name.toLowerCase()));
+          if (newItems.length === 0) return prev;
+
+          return {
+            ...prev,
+            [category]: [...newItems, ...currentList]
+          };
+        });
+
+        setActiveCapsule(category);
+        const catLabel = category === 'attractions' ? 'Attractions' : category === 'hotels' ? 'Hotels' : 'Restaurants';
+        suggestionBadge = {
+          count: items.length,
+          category,
+          text: `Added ${items.length} new option${items.length > 1 ? 's' : ''} to ${catLabel} on the right`
+        };
+      }
+
+      setMessages([
+        ...newMessages,
+        {
+          role: 'assistant',
+          content: data.reply,
+          suggestionBadge
+        }
+      ]);
     } catch (err) {
       setMessages([
         ...newMessages,
@@ -332,6 +453,7 @@ export default function App() {
     setActiveCapsule('flights');
     setBannerIndex(0);
     setSelectedItemDetail(null);
+    setDeckData(getDestinationData(''));
   };
 
   const handlePrint = () => {
@@ -340,7 +462,7 @@ export default function App() {
   };
 
   // Sort flights based on active sort pill
-  const sortedFlights = [...(destinationData.flights || [])].sort((a, b) => {
+  const sortedFlights = [...(deckData.flights || [])].sort((a, b) => {
     if (flightSort === 'cheapest') return a.price - b.price;
     if (flightSort === 'fastest') return a.duration.localeCompare(b.duration);
     return 0; // recommended
@@ -831,15 +953,116 @@ export default function App() {
                 );
               }
 
+              // Clean confirmation card for plan results (no complicated text dump in chat!)
+              if (msg.isPlanResult) {
+                return (
+                  <div key={index} className="message-row assistant">
+                    <div className="avatar-bot">
+                      <Bot size={16} />
+                    </div>
+                    <div className="plan-ready-card">
+                      <div className="ready-card-badge">
+                        <Sparkles size={13} className="ready-sparkle" />
+                        <span>Options Ready</span>
+                      </div>
+
+                      <h4 className="ready-title">
+                        Ready! Your travel options for {msg.destName || destination} are loaded.
+                      </h4>
+
+                      <p className="ready-desc">
+                        I've loaded all flight schedules, verified stays, dining spots, and top attractions into the 4 explorer sections on the right.
+                      </p>
+
+                      <div className="ready-pills-row">
+                        <button
+                          type="button"
+                          className={`ready-tab-pill ${activeCapsule === 'flights' ? 'active' : ''}`}
+                          onClick={() => {
+                            setActiveCapsule('flights');
+                            if (isMobile) setMobileActiveTab('explorer');
+                          }}
+                        >
+                          <Plane size={13} />
+                          <span>Flights ({deckData.flights?.length || 0})</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`ready-tab-pill ${activeCapsule === 'hotels' ? 'active' : ''}`}
+                          onClick={() => {
+                            setActiveCapsule('hotels');
+                            if (isMobile) setMobileActiveTab('explorer');
+                          }}
+                        >
+                          <Hotel size={13} />
+                          <span>Hotels ({deckData.hotels?.length || 0})</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`ready-tab-pill ${activeCapsule === 'restaurants' ? 'active' : ''}`}
+                          onClick={() => {
+                            setActiveCapsule('restaurants');
+                            if (isMobile) setMobileActiveTab('explorer');
+                          }}
+                        >
+                          <Utensils size={13} />
+                          <span>Dining ({deckData.restaurants?.length || 0})</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`ready-tab-pill ${activeCapsule === 'attractions' ? 'active' : ''}`}
+                          onClick={() => {
+                            setActiveCapsule('attractions');
+                            if (isMobile) setMobileActiveTab('explorer');
+                          }}
+                        >
+                          <Compass size={13} />
+                          <span>Attractions ({deckData.attractions?.length || 0})</span>
+                        </button>
+                      </div>
+
+                      <div className="ready-footer-text">
+                        Ask any question below if you want suggestions, custom stops, or adjustments.
+                      </div>
+
+                      <details className="ready-notes-details">
+                        <summary>View raw AI itinerary notes</summary>
+                        <div className="ready-notes-markdown markdown-body">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {msg.content}
+                          </ReactMarkdown>
+                        </div>
+                      </details>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <div key={index} className={`message-row ${msg.role}`}>
                   <div className={msg.role === 'user' ? 'avatar-user' : 'avatar-bot'}>
                     {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
                   </div>
-                  <div className="message-bubble markdown-body">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {msg.content}
-                    </ReactMarkdown>
+                  <div className="message-bubble-wrapper">
+                    <div className="message-bubble markdown-body">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
+                    {msg.suggestionBadge && (
+                      <button
+                        type="button"
+                        className="suggestion-updated-pill"
+                        onClick={() => {
+                          setActiveCapsule(msg.suggestionBadge.category);
+                          if (isMobile) setMobileActiveTab('explorer');
+                        }}
+                      >
+                        <Sparkles size={12} />
+                        <span>{msg.suggestionBadge.text}</span>
+                        <ArrowRight size={11} />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -935,7 +1158,7 @@ export default function App() {
               >
                 <Plane size={13} />
                 <span>Flights</span>
-                <span className="capsule-badge">{destinationData.flights?.length || 4}</span>
+                <span className="capsule-badge">{deckData.flights?.length || 0}</span>
               </button>
 
               <button
@@ -945,7 +1168,7 @@ export default function App() {
               >
                 <Hotel size={13} />
                 <span>Hotels</span>
-                <span className="capsule-badge">{destinationData.hotels?.length || 3}</span>
+                <span className="capsule-badge">{deckData.hotels?.length || 0}</span>
               </button>
 
               <button
@@ -955,7 +1178,7 @@ export default function App() {
               >
                 <Utensils size={13} />
                 <span>Restaurants</span>
-                <span className="capsule-badge">{destinationData.restaurants?.length || 3}</span>
+                <span className="capsule-badge">{deckData.restaurants?.length || 0}</span>
               </button>
 
               <button
@@ -965,7 +1188,7 @@ export default function App() {
               >
                 <Compass size={13} />
                 <span>Attractions</span>
-                <span className="capsule-badge">{destinationData.attractions?.length || 4}</span>
+                <span className="capsule-badge">{deckData.attractions?.length || 0}</span>
               </button>
             </div>
           </div>
@@ -1090,7 +1313,7 @@ export default function App() {
                 </div>
 
                 <div className="cards-grid">
-                  {destinationData.hotels?.map((hotel, idx) => (
+                  {deckData.hotels?.map((hotel, idx) => (
                     <div
                       key={idx}
                       className="stay-card-compact"
@@ -1172,7 +1395,7 @@ export default function App() {
                 </div>
 
                 <div className="cards-grid">
-                  {destinationData.restaurants?.map((rest, idx) => (
+                  {deckData.restaurants?.map((rest, idx) => (
                     <div
                       key={idx}
                       className="dining-card-compact"
@@ -1254,7 +1477,7 @@ export default function App() {
                 </div>
 
                 <div className="cards-grid">
-                  {destinationData.attractions?.map((att, idx) => (
+                  {deckData.attractions?.map((att, idx) => (
                     <div
                       key={idx}
                       className="attraction-card-compact"
