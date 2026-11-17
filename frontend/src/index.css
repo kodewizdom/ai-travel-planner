@@ -293,7 +293,7 @@ body {
   border-color: var(--accent);
 }
 
-/* 50% - 50% Split Grid Container */
+/* Proportional Split Grid Container (~38% Chat, ~62% Visual Explorer) */
 .layout-split-container {
   display: flex;
   width: 100%;
@@ -305,9 +305,12 @@ body {
   gap: 1.15rem;
 }
 
-/* ================= LEFT 50% PANEL: CHATBOT & EMBEDDED FORM ================= */
+/* ================= LEFT PANEL: CHATBOT & EMBEDDED FORM (~38% ratio) ================= */
 .panel-left {
-  width: 50%;
+  width: 38%;
+  flex: 0 0 38%;
+  min-width: 340px;
+  max-width: 480px;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -799,9 +802,10 @@ body {
   text-align: center;
 }
 
-/* ================= RIGHT 50% PANEL: VISUAL BANNER & 4-CAPSULE EXPLORER ================= */
+/* ================= RIGHT PANEL: VISUAL BANNER & 4-CAPSULE EXPLORER (~62% ratio) ================= */
 .panel-right {
-  width: 50%;
+  flex: 1;
+  width: 62%;
   height: 100%;
   display: flex;
   flex-direction: column;
