@@ -1350,64 +1350,415 @@ class TravelTools:
             "data_source": "Google Hotels & Verified Properties",
         }
 
-    def search_attractions(self, destination: str, limit: int = 5) -> dict[str, Any]:
-        """Get destination summary and top attractions."""
+    def search_attractions(self, destination: str, limit: int = 10) -> dict[str, Any]:
+        """Get destination summary and top attractions with direct Maps integration."""
         _, _, formatted = self._geocode(destination)
-        clean = destination.split(",")[0].strip().lower()
-        summary = self._get_wiki_snapshot(clean)
+        clean = destination.split(",")[0].strip()
+        clean_lower = clean.lower()
+        summary = self._get_wiki_snapshot(clean_lower)
 
-        attractions = []
-        if clean in TOP_INDIAN_DESTINATIONS:
-            attractions = TOP_INDIAN_DESTINATIONS[clean]["attractions"][:limit]
-
-        if not attractions:
-            try:
-                r = requests.get(
-                    self.PHOTON_URL,
-                    params={"q": f"tourism {clean}", "limit": str(limit)},
-                    headers={"User-Agent": "TravelPlanner/1.0"},
-                    timeout=self.timeout,
-                )
-                if r.ok:
-                    for f in r.json().get("features", []):
-                        name = f.get("properties", {}).get("name")
-                        if name:
-                            attractions.append({"name": name, "highlight": f"Popular landmark in {clean.title()}."})
-            except Exception:
-                pass
-
-        return {
-            "destination": formatted,
-            "summary": summary,
-            "attractions": attractions[:limit],
+        CURATED_CITY_ATTRACTIONS: dict[str, list[dict[str, Any]]] = {
+            "amritsar": [
+                {
+                    "name": "Golden Temple (Harmandir Sahib)",
+                    "category": "Sacred Sikh Shrine & Spiritual Center",
+                    "address": "Golden Temple Road, Atta Mandi, Katra Ahluwalia, Amritsar - 143006, Punjab, India",
+                    "highlight": "The holiest Gurdwara of Sikhism, adorned with gold foil and surrounded by the sacred Amrit Sarovar.",
+                },
+                {
+                    "name": "Jallianwala Bagh",
+                    "category": "Historic National Memorial",
+                    "address": "Golden Temple Road, Near Golden Temple, Amritsar - 143001, Punjab, India",
+                    "highlight": "Sacred national memorial with historic bullet marks, Martyr's Well, and eternal flame museum.",
+                },
+                {
+                    "name": "Wagah Border (Attari-Wagah)",
+                    "category": "Patriotic Ceremony",
+                    "address": "Attari Border, National Highway 3, Wagah, Amritsar - 143108, Punjab, India",
+                    "highlight": "Electrifying daily Beating Retreat ceremony conducted by BSF and Pakistan Rangers at sunset.",
+                },
+                {
+                    "name": "Partition Museum",
+                    "category": "History & Artifacts Museum",
+                    "address": "Town Hall, Katra Ahluwalia, Amritsar - 143006, Punjab, India",
+                    "highlight": "World's first museum dedicated to the 1947 Partition, featuring oral histories, letters, and art.",
+                },
+                {
+                    "name": "Gobindgarh Fort",
+                    "category": "18th-Century Military Fortress",
+                    "address": "Old Cantt Road, Vijay Chowk, Amritsar - 143001, Punjab, India",
+                    "highlight": "Historic fort built by Maharaja Ranjit Singh featuring light shows, coin museum, and Punjabi culture.",
+                },
+                {
+                    "name": "Durgiana Temple (Lakshmi Narayan)",
+                    "category": "Historic Hindu Temple",
+                    "address": "Near Hathi Gate, Goal Bagh, Amritsar - 143001, Punjab, India",
+                    "highlight": "16th-century temple architecturally resembling the Golden Temple, situated in the middle of a lake.",
+                },
+                {
+                    "name": "Ram Bagh & Maharaja Ranjit Singh Museum",
+                    "category": "Palace Garden & Museum",
+                    "address": "Mall Road, Ram Bagh, Amritsar - 143001, Punjab, India",
+                    "highlight": "Summer palace of the Lion of Punjab surrounded by formal Mughal-style gardens and armory.",
+                },
+                {
+                    "name": "Heritage Walk Street (Town Hall to Golden Temple)",
+                    "category": "Pedestrian Heritage Promenade",
+                    "address": "Heritage Street, Katra Ahluwalia, Amritsar - 143006, Punjab, India",
+                    "highlight": "Cobblestone boulevard showcasing Rajput and Mughal facade architecture, statues, and street food.",
+                },
+            ]
         }
 
-    def search_restaurants(self, destination: str, limit: int = 4) -> dict[str, Any]:
-        """Find popular dining options around the destination."""
-        clean = destination.split(",")[0].strip().lower()
-        restaurants = []
-        if clean in TOP_INDIAN_DESTINATIONS:
-            restaurants = TOP_INDIAN_DESTINATIONS[clean].get("restaurants", [])[:limit]
+        attractions: list[dict[str, Any]] = []
+        seen_names: set[str] = set()
 
-        if not restaurants:
+        # 1. Curated list for known cities
+        if clean_lower in CURATED_CITY_ATTRACTIONS:
+            for item in CURATED_CITY_ATTRACTIONS[clean_lower]:
+                norm = item["name"].lower().strip()
+                if norm not in seen_names:
+                    seen_names.add(norm)
+                    attractions.append({
+                        "name": item["name"],
+                        "category": item.get("category", "Heritage Landmark"),
+                        "address": item.get("address") or f"{item['name']}, {clean.title()}, Punjab, India",
+                        "highlight": item.get("highlight", f"Renowned landmark in {clean.title()}."),
+                        "maps_link": f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(item['name'] + ' ' + clean)}",
+                    })
+
+        elif clean_lower in TOP_INDIAN_DESTINATIONS:
+            for item in TOP_INDIAN_DESTINATIONS[clean_lower].get("attractions", []):
+                norm = item["name"].lower().strip()
+                if norm not in seen_names:
+                    seen_names.add(norm)
+                    attractions.append({
+                        "name": item["name"],
+                        "category": item.get("category", "Historic Landmark"),
+                        "address": f"{item['name']}, {clean.title()}, India",
+                        "highlight": item.get("highlight", f"Top destination highlight in {clean.title()}."),
+                        "maps_link": f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(item['name'] + ' ' + clean)}",
+                    })
+
+        # 2. Live Photon discovery for any city in India
+        if len(attractions) < limit:
             try:
                 r = requests.get(
                     self.PHOTON_URL,
-                    params={"q": f"restaurant {clean}", "limit": str(limit)},
+                    params={"q": f"tourism {clean}", "limit": str(limit + 5)},
                     headers={"User-Agent": "TravelPlanner/1.0"},
                     timeout=self.timeout,
                 )
                 if r.ok:
                     for f in r.json().get("features", []):
-                        name = f.get("properties", {}).get("name")
-                        if name:
-                            restaurants.append({"name": name, "cuisine": "Local & Multi-Cuisine"})
-            except Exception:
-                pass
+                        p = f.get("properties", {})
+                        pname = p.get("name")
+                        if not pname:
+                            continue
+                        norm = pname.lower().strip()
+                        if norm in seen_names:
+                            continue
+                        seen_names.add(norm)
+
+                        street = p.get("street") or p.get("district") or ""
+                        city = p.get("city") or clean.title()
+                        state = p.get("state") or "India"
+                        postcode = p.get("postcode", "")
+                        addr_parts = [pname]
+                        if street:
+                            addr_parts.append(street)
+                        if city:
+                            addr_parts.append(f"{city}{(' - ' + postcode) if postcode else ''}")
+                        if state:
+                            addr_parts.append(state)
+                        full_addr = ", ".join(addr_parts)
+
+                        attractions.append({
+                            "name": pname,
+                            "category": "Popular Attraction",
+                            "address": full_addr,
+                            "highlight": f"Prominent point of interest in {clean.title()}.",
+                            "maps_link": f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(pname + ' ' + full_addr)}",
+                        })
+                        if len(attractions) >= limit:
+                            break
+            except Exception as att_err:
+                log_step("photon_attractions_err", str(att_err))
+
+        return {
+            "destination": formatted or clean.title(),
+            "summary": summary,
+            "attractions": attractions[:limit],
+            "total": len(attractions[:limit]),
+            "note": "Verify opening hours and ticket policies before visiting.",
+        }
+
+    def search_restaurants(self, destination: str, limit: int = 12) -> dict[str, Any]:
+        """Find authentic popular dining options and iconic eateries around the destination."""
+        clean = destination.split(",")[0].strip()
+        clean_lower = clean.lower()
+
+        CURATED_CITY_RESTAURANTS: dict[str, list[dict[str, Any]]] = {
+            "amritsar": [
+                {
+                    "name": "Crystal Restaurant",
+                    "address": "Crystal Restaurant, Cooper Road, Hussainpura, Amritsar - 143001, Punjab, India",
+                    "image_url": "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=Crystal+Restaurant+Cooper+Road+Amritsar+Punjab",
+                },
+                {
+                    "name": "Birjwasi Chat",
+                    "address": "Birjwasi Chat, Cooper Road, Hussainpura, Amritsar - 143001, Punjab, India",
+                    "image_url": "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=Birjwasi+Chat+Cooper+Road+Amritsar+Punjab",
+                },
+                {
+                    "name": "South Indian Madrasi Dosa Wali",
+                    "address": "South Indian Madrasi Dosa Wali, M.M.M. Road, Joshi Nagar, Amritsar - 143001, Punjab, India",
+                    "image_url": "https://images.unsplash.com/photo-1610057099443-fde8c4d50f91?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=South+Indian+Madrasi+Dosa+Wali+MMM+Road+Amritsar+Punjab",
+                },
+                {
+                    "name": "Kesar Da Dhaba",
+                    "address": "Kesar Da Dhaba, Chowk Passian, Near Telephone Exchange, Amritsar - 143001, Punjab, India",
+                    "image_url": "https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=Kesar+Da+Dhaba+Amritsar+Punjab",
+                },
+                {
+                    "name": "Bharawan Da Dhaba",
+                    "address": "Bharawan Da Dhaba, Town Hall, Near Golden Temple, Amritsar - 143001, Punjab, India",
+                    "image_url": "https://images.unsplash.com/photo-1589302168068-964664d93dc0?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=Bharawan+Da+Dhaba+Town+Hall+Amritsar+Punjab",
+                },
+                {
+                    "name": "Bhai Kulwant Singh Kulchian Wale",
+                    "address": "Bhai Kulwant Singh Kulchian Wale, Bazar Bikanerian, Near Golden Temple, Amritsar - 143001, Punjab, India",
+                    "image_url": "https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=Bhai+Kulwant+Singh+Kulchian+Wale+Amritsar+Punjab",
+                },
+                {
+                    "name": "Makhan Fish & Chicken Corner",
+                    "address": "Makhan Fish & Chicken Corner, Majitha Road, Amritsar - 143001, Punjab, India",
+                    "image_url": "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=Makhan+Fish+Corner+Majitha+Road+Amritsar+Punjab",
+                },
+                {
+                    "name": "Novelty Restaurant",
+                    "address": "Novelty Restaurant, Lawrence Road, Joshi Nagar, Amritsar - 143001, Punjab, India",
+                    "image_url": "https://images.unsplash.com/photo-1552566626-52f8b828add9?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=Novelty+Restaurant+Lawrence+Road+Amritsar+Punjab",
+                },
+                {
+                    "name": "Kanha Sweets",
+                    "address": "Kanha Sweets, Lawrence Road, White Avenue, Amritsar - 143001, Punjab, India",
+                    "image_url": "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=Kanha+Sweets+Lawrence+Road+Amritsar+Punjab",
+                },
+                {
+                    "name": "Laavista Cafe & Restaurant",
+                    "address": "Laavista Cafe & Restaurant, Majitha Road, Amritsar - 143001, Punjab, India",
+                    "image_url": "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=Laavista+Cafe+Restaurant+Majitha+Road+Amritsar+Punjab",
+                },
+            ],
+            "delhi": [
+                {
+                    "name": "Karim's",
+                    "address": "16, Gali Kababian, Jama Masjid, Old Delhi, Delhi - 110006, India",
+                    "image_url": "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=Karims+Jama+Masjid+Old+Delhi",
+                },
+                {
+                    "name": "Bukhara",
+                    "address": "ITC Maurya, Sardar Patel Marg, Diplomatic Enclave, New Delhi - 110021, India",
+                    "image_url": "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=Bukhara+ITC+Maurya+New+Delhi",
+                },
+                {
+                    "name": "Gulati Restaurant",
+                    "address": "6, Pandara Road Market, New Delhi - 110003, India",
+                    "image_url": "https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=Gulati+Restaurant+Pandara+Road+New+Delhi",
+                },
+                {
+                    "name": "Saravana Bhavan",
+                    "address": "P-15, Connaught Circus, Connaught Place, New Delhi - 110001, India",
+                    "image_url": "https://images.unsplash.com/photo-1610057099443-fde8c4d50f91?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=Saravana+Bhavan+Connaught+Place+New+Delhi",
+                },
+                {
+                    "name": "Paranthe Wali Gali",
+                    "address": "Chandni Chowk, Old Delhi, Delhi - 110006, India",
+                    "image_url": "https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=Paranthe+Wali+Gali+Chandni+Chowk+Delhi",
+                },
+            ],
+            "jaipur": [
+                {
+                    "name": "LMB (Laxmi Mishtan Bhandar)",
+                    "address": "Shop 98-99, Johari Bazar, Bapu Bazar, Jaipur - 302003, Rajasthan, India",
+                    "image_url": "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=LMB+Johari+Bazar+Jaipur",
+                },
+                {
+                    "name": "1135 AD",
+                    "address": "Amer Fort, Amer, Jaipur - 302028, Rajasthan, India",
+                    "image_url": "https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=1135+AD+Amer+Fort+Jaipur",
+                },
+                {
+                    "name": "Rawat Mishthan Bhandar",
+                    "address": "Station Road, Opposite Polo Victory Cinema, Sindhi Camp, Jaipur - 302001, Rajasthan, India",
+                    "image_url": "https://images.unsplash.com/photo-1601050690597-df0568f70950?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=Rawat+Mishthan+Bhandar+Station+Road+Jaipur",
+                },
+                {
+                    "name": "Handi Restaurant",
+                    "address": "Maya Mansion, MI Road, Opposite GPO, Jaipur - 302001, Rajasthan, India",
+                    "image_url": "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=Handi+Restaurant+MI+Road+Jaipur",
+                },
+            ],
+            "mumbai": [
+                {
+                    "name": "Trishna",
+                    "address": "7, Sai Baba Marg, Kala Ghoda, Fort, Mumbai - 400001, Maharashtra, India",
+                    "image_url": "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=Trishna+Kala+Ghoda+Mumbai",
+                },
+                {
+                    "name": "Britannia & Co.",
+                    "address": "Wakefield House, 11 Sprott Road, Ballard Estate, Fort, Mumbai - 400001, Maharashtra, India",
+                    "image_url": "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=Britannia+Co+Ballard+Estate+Mumbai",
+                },
+                {
+                    "name": "Bademiya",
+                    "address": "Tulloch Road, Apollo Bunder, Colaba, Mumbai - 400039, Maharashtra, India",
+                    "image_url": "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=Bademiya+Colaba+Mumbai",
+                },
+            ],
+            "goa": [
+                {
+                    "name": "Britto's",
+                    "address": "House No. 7/171, Saunta Vaddo, Baga Beach, Calangute, Goa - 403516, India",
+                    "image_url": "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=Brittos+Baga+Beach+Goa",
+                },
+                {
+                    "name": "Fisherman's Wharf",
+                    "address": "Before The Cutbona Boat Jetty, Mobor, Cavelossim, Goa - 403731, India",
+                    "image_url": "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=Fishermans+Wharf+Cavelossim+Goa",
+                },
+                {
+                    "name": "Gunpowder",
+                    "address": "No. 44, Saunto Vaddo, Assagao, Goa - 403507, India",
+                    "image_url": "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=480&q=80",
+                    "maps_link": "https://www.google.com/maps/search/?api=1&query=Gunpowder+Assagao+Goa",
+                },
+            ],
+        }
+
+        restaurants: list[dict[str, Any]] = []
+        seen_names: set[str] = set()
+
+        # 1. Curated authentic spots for known city
+        for r in CURATED_CITY_RESTAURANTS.get(clean_lower, []):
+            norm = r["name"].lower().strip()
+            if norm not in seen_names:
+                seen_names.add(norm)
+                restaurants.append(dict(r))
+
+        # 2. Geoapify Places if apiKey is present
+        geoapify_key = os.environ.get("GEOAPIFY_KEY")
+        if geoapify_key and len(restaurants) < limit:
+            try:
+                lat, lon, formatted_city = self._geocode(clean)
+                resp = requests.get(
+                    "https://api.geoapify.com/v2/places",
+                    params={
+                        "categories": "catering.restaurant",
+                        "filter": f"circle:{lon},{lat},8000",
+                        "bias": f"proximity:{lon},{lat}",
+                        "limit": limit,
+                        "apiKey": geoapify_key.strip(),
+                    },
+                    timeout=self.timeout,
+                )
+                if resp.ok:
+                    for f in resp.json().get("features", []):
+                        p = f.get("properties", {})
+                        pname = p.get("name")
+                        if not pname:
+                            continue
+                        norm = pname.lower().strip()
+                        if norm in seen_names:
+                            continue
+                        seen_names.add(norm)
+                        addr = p.get("formatted") or p.get("address_line2") or f"{pname}, {clean}, India"
+                        maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(pname + ' ' + addr)}"
+                        restaurants.append({
+                            "name": pname,
+                            "address": addr,
+                            "image_url": p.get("image") or "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=480&q=80",
+                            "maps_link": maps_url,
+                            "website": p.get("website"),
+                        })
+            except Exception as g_err:
+                log_step("geoapify_restaurants_err", str(g_err))
+
+        # 3. Live Photon OpenStreetMap POIs (Free & unlimited)
+        if len(restaurants) < limit:
+            try:
+                r = requests.get(
+                    self.PHOTON_URL,
+                    params={"q": f"restaurant {clean}", "limit": 20},
+                    headers={"User-Agent": "TravelPlanner/1.0"},
+                    timeout=self.timeout,
+                )
+                if r.ok:
+                    for f in r.json().get("features", []):
+                        p = f.get("properties", {})
+                        pname = p.get("name")
+                        if not pname:
+                            continue
+                        norm = pname.lower().strip()
+                        if norm in seen_names:
+                            continue
+                        seen_names.add(norm)
+
+                        street = p.get("street") or p.get("district") or ""
+                        city = p.get("city") or clean.title()
+                        state = p.get("state") or "India"
+                        postcode = p.get("postcode", "")
+                        addr_parts = [pname]
+                        if street:
+                            addr_parts.append(street)
+                        if city:
+                            addr_parts.append(f"{city}{(' - ' + postcode) if postcode else ''}")
+                        if state:
+                            addr_parts.append(state)
+                        full_addr = ", ".join(addr_parts)
+                        maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(pname + ' ' + full_addr)}"
+
+                        restaurants.append({
+                            "name": pname,
+                            "address": full_addr,
+                            "image_url": "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=480&q=80",
+                            "maps_link": maps_url,
+                        })
+                        if len(restaurants) >= limit:
+                            break
+            except Exception as p_err:
+                log_step("photon_restaurants_err", str(p_err))
 
         return {
             "destination": destination.title(),
             "restaurants": restaurants[:limit],
+            "total": len(restaurants[:limit]),
+            "note": "Verify prices and availability with the provider before booking.",
         }
 
     def run_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:

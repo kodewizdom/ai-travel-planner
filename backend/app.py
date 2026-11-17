@@ -239,6 +239,55 @@ def get_hotels(req: HotelSearchRequest):
         }
 
 
+class RestaurantSearchRequest(BaseModel):
+    destination: str
+    limit: int = 12
+
+
+@app.post("/api/restaurants")
+def get_restaurants(req: RestaurantSearchRequest):
+    try:
+        result = tools.search_restaurants(destination=req.destination, limit=req.limit)
+        return {
+            "status": "success",
+            "destination": req.destination,
+            "restaurants": result.get("restaurants", []),
+            "total": result.get("total", 0),
+        }
+    except Exception as e:
+        log_step("restaurants_api_error", str(e))
+        return {
+            "status": "fallback",
+            "restaurants": [],
+            "error": str(e),
+        }
+
+
+class AttractionSearchRequest(BaseModel):
+    destination: str
+    limit: int = 10
+
+
+@app.post("/api/attractions")
+def get_attractions(req: AttractionSearchRequest):
+    try:
+        result = tools.search_attractions(destination=req.destination, limit=req.limit)
+        return {
+            "status": "success",
+            "destination": req.destination,
+            "attractions": result.get("attractions", []),
+            "summary": result.get("summary", ""),
+            "total": result.get("total", 0),
+        }
+    except Exception as e:
+        log_step("attractions_api_error", str(e))
+        return {
+            "status": "fallback",
+            "attractions": [],
+            "error": str(e),
+        }
+
+
 @app.post("/api/plan")
 def handle_plan(req: PlanRequest):
     if not req.origin or not req.destination:
@@ -295,6 +344,8 @@ def handle_plan(req: PlanRequest):
     # Concurrently search live flights & hotels for the right-hand panel
     live_flights = []
     live_hotels = []
+    live_restaurants = []
+    live_attractions = []
     flight_data_source = "Google Flights"
     try:
         orig = req.origin_airport or req.origin
@@ -341,12 +392,26 @@ def handle_plan(req: PlanRequest):
         log_step("plan_hotels_lookup_err", str(h_err))
 
     try:
+        r_res = tools.search_restaurants(destination=req.destination, limit=12)
+        live_restaurants = r_res.get("restaurants") or []
+    except Exception as r_err:
+        log_step("plan_restaurants_lookup_err", str(r_err))
+
+    try:
+        a_res = tools.search_attractions(destination=req.destination, limit=10)
+        live_attractions = a_res.get("attractions") or []
+    except Exception as a_err:
+        log_step("plan_attractions_lookup_err", str(a_err))
+
+    try:
         reply = travel_agent.chat(form_prompt, req.conversation_history)
         return {
             "prompt": form_prompt,
             "reply": reply,
             "flights": live_flights,
             "hotels": live_hotels,
+            "restaurants": live_restaurants,
+            "attractions": live_attractions,
             "data_source": flight_data_source,
             "status": "success",
         }

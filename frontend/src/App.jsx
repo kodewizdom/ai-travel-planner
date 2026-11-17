@@ -119,7 +119,9 @@ export default function App() {
       return;
     }
 
-    // Automatically fetch 12 live hotels for the destination (SerpApi or Hybrid Engine)
+    setDeckData(base);
+
+    // 1. Fetch 12 live hotels for the destination
     fetch('/api/hotels', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -134,17 +136,53 @@ export default function App() {
       .then(res => res.json())
       .then(data => {
         if (data.hotels && data.hotels.length > 0) {
-          setDeckData({
-            ...base,
+          setDeckData(prev => ({
+            ...prev,
             hotels: data.hotels
-          });
-        } else {
-          setDeckData(base);
+          }));
         }
       })
-      .catch(() => {
-        setDeckData(base);
-      });
+      .catch(() => {});
+
+    // 2. Fetch authentic local restaurants for the destination
+    fetch('/api/restaurants', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        destination,
+        limit: 12
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.restaurants && data.restaurants.length > 0) {
+          setDeckData(prev => ({
+            ...prev,
+            restaurants: data.restaurants
+          }));
+        }
+      })
+      .catch(() => {});
+
+    // 3. Fetch top sights and places to visit for the destination
+    fetch('/api/attractions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        destination,
+        limit: 10
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.attractions && data.attractions.length > 0) {
+          setDeckData(prev => ({
+            ...prev,
+            attractions: data.attractions
+          }));
+        }
+      })
+      .catch(() => {});
   }, [destination]);
 
   const banners = destination ? (deckData.banners?.length ? deckData.banners : DEFAULT_INDIA_BANNERS) : DEFAULT_INDIA_BANNERS;
@@ -372,6 +410,20 @@ export default function App() {
         setDeckData(prev => ({
           ...prev,
           hotels: data.hotels
+        }));
+      }
+
+      if (data.restaurants && data.restaurants.length > 0) {
+        setDeckData(prev => ({
+          ...prev,
+          restaurants: data.restaurants
+        }));
+      }
+
+      if (data.attractions && data.attractions.length > 0) {
+        setDeckData(prev => ({
+          ...prev,
+          attractions: data.attractions
         }));
       }
 
@@ -1169,7 +1221,9 @@ export default function App() {
               >
                 <Plane size={15} />
                 <span>Flights</span>
-                <span className="capsule-count-badge">{(deckData.flights || []).length || 3}</span>
+                {deckData.flights?.length > 0 && (
+                  <span className="capsule-count-badge">{deckData.flights.length}</span>
+                )}
               </button>
 
               <button
@@ -1179,7 +1233,9 @@ export default function App() {
               >
                 <Hotel size={15} />
                 <span>Hotels</span>
-                <span className="capsule-count-badge">{(deckData.hotels || []).length || 2}</span>
+                {deckData.hotels?.length > 0 && (
+                  <span className="capsule-count-badge">{deckData.hotels.length}</span>
+                )}
               </button>
 
               <button
@@ -1189,7 +1245,9 @@ export default function App() {
               >
                 <Utensils size={15} />
                 <span>Restaurants</span>
-                <span className="capsule-count-badge">{(deckData.restaurants || []).length || 2}</span>
+                {deckData.restaurants?.length > 0 && (
+                  <span className="capsule-count-badge">{deckData.restaurants.length}</span>
+                )}
               </button>
 
               <button
@@ -1198,8 +1256,10 @@ export default function App() {
                 onClick={() => setActiveCapsule('attractions')}
               >
                 <Compass size={15} />
-                <span>Attractions</span>
-                <span className="capsule-count-badge">{(deckData.attractions || []).length || 2}</span>
+                <span>Places to Visit</span>
+                {deckData.attractions?.length > 0 && (
+                  <span className="capsule-count-badge">{deckData.attractions.length}</span>
+                )}
               </button>
             </div>
           </div>
@@ -1465,138 +1525,88 @@ export default function App() {
               <div className="deck-scrollable">
                 <div className="deck-header-row">
                   <div className="deck-summary">
-                    <h3>Local Cuisine & Dining</h3>
-                    <p>{destination ? `Iconic culinary spots and flavors in ${destination}` : 'Select a destination on the left to view dining'}</p>
+                    <h3>Restaurants</h3>
                   </div>
                 </div>
 
-                <div className="cards-grid">
+                <div className="stays-horizontal-list">
                   {deckData.restaurants?.map((rest, idx) => (
-                    <div
-                      key={idx}
-                      className="dining-card-refined"
-                      onClick={() => setSelectedItemDetail({ type: 'restaurant', data: rest })}
-                    >
-                      <div className="card-top-row">
-                        <div className="card-heading-group">
-                          <h4 className="card-title">{rest.name}</h4>
-                          <div className="card-subtitle-accent">{rest.cuisine || 'North Indian & Regional Specialties'}</div>
-                        </div>
-                        <div className="rating-badge-peach">
-                          <span className="star-icon">★</span>
-                          <span className="score-val">{rest.rating || 4.6}</span>
-                        </div>
+                    <article key={idx} className="stay-card-horizontal restaurant-card-horizontal">
+                      <div className="stay-thumb-box">
+                        <img
+                          src={rest.image_url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=480&q=80"}
+                          alt={rest.name}
+                          className="stay-thumb-img"
+                          onError={(e) => {
+                            e.currentTarget.src = "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=480&q=80";
+                          }}
+                        />
+                        <span className="illustrative-photo-badge">Illustrative photo</span>
                       </div>
 
-                      <div className="card-location-row">
-                        <MapPin size={13} className="pin-icon" />
+                      <div className="stay-info-col">
+                        <h4 className="stay-property-name">{rest.name}</h4>
+                        <p className="stay-card-address">{rest.address || `${rest.name}, ${destination || 'City Center'}, India`}</p>
+                      </div>
+
+                      <div className="stay-card-actions">
                         <a
-                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(rest.name + ' ' + (rest.location || destination || 'India'))}`}
+                          href={rest.maps_link || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(rest.name + ' ' + (rest.address || destination || 'India'))}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="card-location-text map-link"
-                          onClick={(e) => e.stopPropagation()}
-                          title={`Check ${rest.name} on Google Maps`}
+                          className="stay-action-btn primary"
+                          title={`Open ${rest.name} on Google Maps`}
                         >
-                          {rest.location || destination || 'City Center'}
+                          <span>Open Maps</span>
+                          <span className="btn-arrow">↗</span>
                         </a>
                       </div>
-
-                      <div className="card-must-try-block">
-                        <span className="must-try-label">Must Try:</span>
-                        <div className="must-try-pills">
-                          {(rest.mustTry || ['Signature Thali', 'Slow-cooked Curries', 'Artisan Breads', 'Kulfi']).map((dish, dIdx) => (
-                            <span key={dIdx} className="must-try-pill">{dish}</span>
-                          ))}
-                        </div>
-                      </div>
-
-                      <p className="card-desc-italic">
-                        {rest.ambience || rest.highlight || 'Traditional setting with regional music and authentic hospitality.'}
-                      </p>
-
-                      <div className="card-footer-row">
-                        <div className="card-price-block">
-                          <span className="price-dim">Approx </span>
-                          <span className="price-curr">₹</span>
-                          <span className="price-amount">{(rest.priceForTwo || 1200).toLocaleString('en-IN')}</span>
-                          <span className="price-suffix"> for two</span>
-                        </div>
-
-                        <a
-                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(rest.name + ' ' + (rest.location || destination || 'India'))}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="card-action-link"
-                          onClick={(e) => e.stopPropagation()}
-                          title={`View ${rest.name} location`}
-                        >
-                          <span className="action-link-text">View Details</span>
-                          <ArrowRight size={14} className="action-arrow" />
-                        </a>
-                      </div>
-                    </div>
+                    </article>
                   ))}
+                </div>
+
+                <div className="provider-disclaimer">
+                  Verify prices and availability with the provider before booking.
                 </div>
               </div>
             )}
 
-            {/* 4. ATTRACTIONS TAB */}
+            {/* 4. ATTRACTIONS TAB (PLACES TO VISIT) */}
             {activeCapsule === 'attractions' && (
               <div className="deck-scrollable">
                 <div className="deck-header-row">
                   <div className="deck-summary">
-                    <h3>Must-Visit Attractions</h3>
-                    <p>{destination ? `Key landmarks and experiences in ${destination}` : 'Select a destination on the left to explore sights'}</p>
+                    <h3>Places to Visit</h3>
                   </div>
                 </div>
 
-                <div className="cards-grid">
+                <div className="stays-horizontal-list">
                   {deckData.attractions?.map((att, idx) => (
-                    <div
-                      key={idx}
-                      className="attraction-card-refined"
-                      onClick={() => setSelectedItemDetail({ type: 'attraction', data: att })}
-                    >
-                      <div className="card-top-row">
-                        <div className="card-heading-group">
-                          <h4 className="card-title">{att.name}</h4>
-                          <div className="card-subtitle-accent">{att.category || 'Heritage Landmark'}</div>
-                        </div>
+                    <article key={idx} className="stay-card-horizontal attraction-card-horizontal">
+                      <div className="stay-info-col">
+                        <h4 className="stay-property-name">{att.name}</h4>
+                        <p className="stay-card-address">{att.address || `${att.name}, ${destination || 'City Center'}, India`}</p>
+                        {att.highlight && <p className="attraction-highlight-text">{att.highlight}</p>}
                       </div>
 
-                      <div className="attraction-meta-pill-bar">
-                        <div className="meta-item">
-                          <Clock size={13} className="meta-icon" />
-                          <span>{att.timings || '09:00 AM - 05:00 PM'}</span>
-                        </div>
-                        <div className="meta-item">
-                          <Info size={13} className="meta-icon" />
-                          <span>{att.entryFee || '₹30 (Indians)'}</span>
-                        </div>
-                      </div>
-
-                      <p className="card-desc-text">
-                        {att.highlights || att.description || 'Ancient architecture, royal artifacts, and panoramic views over the city.'}
-                      </p>
-
-                      <div className="card-footer-divider" />
-
-                      <div className="card-footer-row">
+                      <div className="stay-card-actions">
                         <a
-                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(att.name + ' ' + (att.location || destination || 'India'))}`}
+                          href={att.maps_link || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(att.name + ' ' + (att.address || destination || 'India'))}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="attraction-guide-link"
-                          onClick={(e) => e.stopPropagation()}
-                          title={`View ${att.name} on Google Maps`}
+                          className="stay-action-btn primary"
+                          title={`Open ${att.name} on Google Maps`}
                         >
-                          <span>View Complete Sights Guide</span>
-                          <ArrowRight size={14} className="action-arrow" />
+                          <span>Open Maps</span>
+                          <span className="btn-arrow">↗</span>
                         </a>
                       </div>
-                    </div>
+                    </article>
                   ))}
+                </div>
+
+                <div className="provider-disclaimer">
+                  Verify opening hours and ticket policies with the provider before visiting.
                 </div>
               </div>
             )}

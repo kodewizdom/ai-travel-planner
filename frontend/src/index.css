@@ -2943,3 +2943,101 @@ body {
   margin-bottom: 0.5rem;
   letter-spacing: 0.01em;
 }
+
+/* ================= RESTAURANT & ATTRACTION HORIZONTAL ROWS ================= */
+.restaurant-card-horizontal,
+.attraction-card-horizontal {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 0.85rem 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 1.15rem;
+  transition: all 0.2s ease;
+}
+
+.restaurant-card-horizontal:hover,
+.attraction-card-horizontal:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  transform: translateY(-1px);
+}
+
+.stay-thumb-box {
+  position: relative;
+  width: 112px;
+  height: 82px;
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #edf2fb;
+}
+
+.stay-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.illustrative-photo-badge {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(15, 23, 42, 0.82);
+  color: #ffffff;
+  font-size: 0.62rem;
+  font-weight: 500;
+  text-align: center;
+  padding: 3px 4px;
+  letter-spacing: 0.02em;
+}
+
+.stay-info-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+
+.stay-property-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0;
+}
+
+.stay-info-col .stay-card-address {
+  font-size: 0.80rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  margin: 0;
+}
+
+.attraction-highlight-text {
+  font-size: 0.77rem;
+  color: var(--text-dim);
+  margin: 0.2rem 0 0;
+  line-height: 1.4;
+}
+
+@media (max-width: 640px) {
+  .restaurant-card-horizontal,
+  .attraction-card-horizontal {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+  .stay-thumb-box {
+    width: 100%;
+    height: 120px;
+  }
+  .stay-card-actions {
+    margin-left: auto;
+  }
+}
