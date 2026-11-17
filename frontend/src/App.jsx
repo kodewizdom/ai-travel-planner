@@ -113,7 +113,38 @@ export default function App() {
   const [deckData, setDeckData] = useState(() => getDestinationData(destination));
 
   useEffect(() => {
-    setDeckData(getDestinationData(destination));
+    const base = getDestinationData(destination);
+    if (!destination) {
+      setDeckData(base);
+      return;
+    }
+
+    // Automatically fetch 12 live hotels for the destination (SerpApi or Hybrid Engine)
+    fetch('/api/hotels', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        destination,
+        check_in_date: departureDate,
+        check_out_date: returnDate,
+        adults: travellers,
+        rooms: 1
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.hotels && data.hotels.length > 0) {
+          setDeckData({
+            ...base,
+            hotels: data.hotels
+          });
+        } else {
+          setDeckData(base);
+        }
+      })
+      .catch(() => {
+        setDeckData(base);
+      });
   }, [destination]);
 
   const banners = destination ? (deckData.banners?.length ? deckData.banners : DEFAULT_INDIA_BANNERS) : DEFAULT_INDIA_BANNERS;
@@ -334,6 +365,13 @@ export default function App() {
         setDeckData(prev => ({
           ...prev,
           flights: data.flights
+        }));
+      }
+
+      if (data.hotels && data.hotels.length > 0) {
+        setDeckData(prev => ({
+          ...prev,
+          hotels: data.hotels
         }));
       }
 
@@ -1348,75 +1386,76 @@ export default function App() {
               <div className="deck-scrollable">
                 <div className="deck-header-row">
                   <div className="deck-summary">
-                    <h3>Curated Stays & Resorts</h3>
-                    <p>{destination ? `Top rated accommodations in ${destination}` : 'Select a destination on the left to see stays'}</p>
+                    <h3>Hotels</h3>
+                    <p>{destination ? `Curated accommodations in ${destination}` : 'Select a destination on the left to see stays'}</p>
                   </div>
                 </div>
 
-                <div className="cards-grid">
+                <div className="stays-horizontal-list">
                   {deckData.hotels?.map((hotel, idx) => (
-                    <div
+                    <article
                       key={idx}
-                      className="hotel-card-refined"
+                      className="stay-card-horizontal"
                       onClick={() => setSelectedItemDetail({ type: 'hotel', data: hotel })}
                     >
-                      <div className="card-top-row">
-                        <div className="card-heading-group">
-                          <h4 className="card-title">{hotel.name}</h4>
-                          <div className="card-subtitle-accent">{hotel.category || '4-Star Modern Hotel'}</div>
+                      <img
+                        src={hotel.image_url || "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=400&q=80"}
+                        alt={hotel.name}
+                        className="stay-card-thumb"
+                        loading="lazy"
+                      />
+                      <div className="stay-card-info">
+                        <h4 className="stay-card-name">{hotel.name}</h4>
+                        <div className="stay-card-rating">
+                          <span className="stay-star">★</span>
+                          <span>{hotel.rating || hotel.overall_rating || 4.5}</span>
+                          <span className="stay-review-count">
+                            ({(hotel.reviews || hotel.reviewsCount || 1200).toLocaleString('en-IN')} reviews)
+                          </span>
                         </div>
-                        <div className="rating-badge-peach">
-                          <span className="star-icon">★</span>
-                          <span className="score-val">{hotel.rating || 4.5}</span>
-                        </div>
+                        {hotel.location && (
+                          <div className="stay-card-address">{hotel.location}</div>
+                        )}
                       </div>
 
-                      <div className="card-location-row">
-                        <MapPin size={13} className="pin-icon" />
-                        <a
-                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hotel.name + ' ' + (hotel.location || destination || 'India'))}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="card-location-text map-link"
-                          onClick={(e) => e.stopPropagation()}
-                          title={`Check ${hotel.name} on Google Maps`}
-                        >
-                          {hotel.location || destination || 'Central Business District'}
-                        </a>
+                      <div className="stay-card-price-col">
+                        <div className="stay-price-amount">₹{(hotel.pricePerNight || hotel.nightly_rate || 1250).toLocaleString('en-IN')}.00</div>
+                        <div className="stay-price-unit">Per night</div>
                       </div>
 
-                      <p className="card-desc-text">
-                        {hotel.description || 'Comfortable and convenient location close to key shopping hubs and transit.'}
-                      </p>
-
-                      <div className="card-pills-row">
-                        {(hotel.amenities || ['Free Wi-Fi', 'Buffet Breakfast', 'Fitness Center', 'Airport Shuttle']).map((am, aIdx) => (
-                          <span key={aIdx} className="amenity-pill-tag">{am}</span>
-                        ))}
+                      <div className="stay-card-actions">
+                        {hotel.property_website ? (
+                          <a
+                            href={hotel.property_website}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="stay-action-btn primary"
+                            onClick={(e) => e.stopPropagation()}
+                            title={`Visit ${hotel.name} official site`}
+                          >
+                            <span>Visit property site</span>
+                            <span className="btn-arrow">↗</span>
+                          </a>
+                        ) : (
+                          <a
+                            href={hotel.search_link || `https://www.google.com/travel/hotels?q=${encodeURIComponent(hotel.name + ' ' + (destination || 'India'))}&curr=INR`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="stay-action-btn secondary"
+                            onClick={(e) => e.stopPropagation()}
+                            title={`Search ${hotel.name} on Google Hotels`}
+                          >
+                            <span>Search hotel</span>
+                            <span className="btn-arrow">↗</span>
+                          </a>
+                        )}
                       </div>
-
-                      <div className="card-footer-row">
-                        <div className="card-price-block">
-                          <span className="price-prefix">From </span>
-                          <span className="price-curr">₹</span>
-                          <span className="price-amount">{(hotel.pricePerNight || 4500).toLocaleString('en-IN')}</span>
-                          <span className="price-suffix"> / night</span>
-                        </div>
-
-                        <a
-                          href={`https://www.makemytrip.com/hotels/hotel-listing/?city=${encodeURIComponent(destination || 'India')}&searchText=${encodeURIComponent(hotel.name)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="card-action-link"
-                          onClick={(e) => e.stopPropagation()}
-                          title={`Book ${hotel.name} on MakeMyTrip`}
-                        >
-                          <span className="action-link-text">View Details</span>
-                          <ArrowRight size={14} className="action-arrow" />
-                        </a>
-                      </div>
-                    </div>
+                    </article>
                   ))}
+                </div>
+
+                <div className="provider-disclaimer">
+                  Verify prices and availability with the provider before booking.
                 </div>
               </div>
             )}

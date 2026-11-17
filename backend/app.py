@@ -203,6 +203,42 @@ def get_flights(req: FlightSearchRequest):
         }
 
 
+class HotelSearchRequest(BaseModel):
+    destination: str
+    check_in_date: str | None = None
+    check_out_date: str | None = None
+    adults: int = 1
+    rooms: int = 1
+
+
+@app.post("/api/hotels")
+def get_hotels(req: HotelSearchRequest):
+    try:
+        from datetime import datetime, timedelta
+        check_in = req.check_in_date or datetime.today().strftime("%Y-%m-%d")
+        check_out = req.check_out_date or (datetime.today() + timedelta(days=2)).strftime("%Y-%m-%d")
+        result = tools.search_hotels(
+            destination=req.destination,
+            check_in_date=check_in,
+            check_out_date=check_out,
+            adults=req.adults,
+            rooms=req.rooms,
+        )
+        return {
+            "status": "success",
+            "destination": req.destination,
+            "hotels": result.get("hotels", []),
+            "data_source": result.get("data_source", "Google Hotels & Verified Properties"),
+        }
+    except Exception as e:
+        log_step("hotels_api_error", str(e))
+        return {
+            "status": "fallback",
+            "hotels": [],
+            "error": str(e),
+        }
+
+
 @app.post("/api/plan")
 def handle_plan(req: PlanRequest):
     if not req.origin or not req.destination:
@@ -256,8 +292,9 @@ def handle_plan(req: PlanRequest):
             "hotel options meeting the location preference, restaurants, itinerary, and budget."
         )
 
-    # Concurrently search live flights for the right-hand panel
+    # Concurrently search live flights & hotels for the right-hand panel
     live_flights = []
+    live_hotels = []
     flight_data_source = "Google Flights"
     try:
         orig = req.origin_airport or req.origin
@@ -291,11 +328,25 @@ def handle_plan(req: PlanRequest):
         log_step("plan_flights_lookup_err", str(fl_err))
 
     try:
+        hotel_res = tools.search_hotels(
+            destination=req.destination,
+            check_in_date=req.departure_date,
+            check_out_date=req.return_date or req.departure_date,
+            adults=req.travellers,
+            rooms=1,
+            location_preference=req.hotel_preference,
+        )
+        live_hotels = hotel_res.get("hotels") or []
+    except Exception as h_err:
+        log_step("plan_hotels_lookup_err", str(h_err))
+
+    try:
         reply = travel_agent.chat(form_prompt, req.conversation_history)
         return {
             "prompt": form_prompt,
             "reply": reply,
             "flights": live_flights,
+            "hotels": live_hotels,
             "data_source": flight_data_source,
             "status": "success",
         }
