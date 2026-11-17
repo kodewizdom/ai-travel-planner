@@ -892,28 +892,28 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.45rem;
-  padding: 0.55rem 1.15rem;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-color);
-  border-radius: 9999px;
-  color: #1e3a8a;
-  font-size: 0.86rem;
-  font-weight: 600;
+  gap: 0.55rem;
+  padding: 0.58rem 1.15rem;
+  background: #f0f4fc;
+  border: 1px solid #e0e8fa;
+  border-radius: 28px;
+  color: #425477;
+  font-size: 0.85rem;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s ease;
   white-space: nowrap;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  box-shadow: none !important;
 }
 .capsule-btn:hover {
-  background: var(--accent-bg);
-  color: var(--accent);
+  background: #e4edf9;
+  color: #1769e8;
 }
 .capsule-btn.active {
   background: #1769e8 !important;
   color: #ffffff !important;
   border-color: #1769e8 !important;
-  box-shadow: 0 4px 14px rgba(23, 105, 232, 0.3) !important;
+  box-shadow: none !important;
 }
 
 .capsule-count-badge {
