@@ -2458,6 +2458,15 @@ body {
 }
 
 /* ================= INITIAL STATE CARD (BEFORE SEARCH) ================= */
+.empty-state {
+  padding: 32px 24px;
+  text-align: center;
+  color: #7180a0;
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0;
+}
+
 .initial-state-deck-card {
   background: var(--bg-panel);
   border-radius: 20px;
