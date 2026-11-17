@@ -23,7 +23,12 @@ import {
   Sparkles,
   SlidersHorizontal,
   Info,
-  Check
+  Check,
+  MessageSquare,
+  Folder,
+  Landmark,
+  Minus,
+  Plus
 } from 'lucide-react';
 
 import { DEFAULT_INDIA_BANNERS, getDestinationData } from './destinationData';
@@ -80,8 +85,8 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStepIndex, setLoadingStepIndex] = useState(0);
 
-  // App Theme: defaults to system without manual selection needed
-  const [theme, setTheme] = useState(() => localStorage.getItem('travel_planner_theme') || 'system');
+  // App Theme: defaults to light to match modern aesthetic
+  const [theme, setTheme] = useState(() => localStorage.getItem('travel_planner_theme') || 'light');
   const [systemIsDark, setSystemIsDark] = useState(() => {
     if (typeof window !== 'undefined') {
       return window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -596,24 +601,45 @@ export default function App() {
             </div>
           </div>
 
-          {/* Quick Nav: Trip Planner */}
+          {/* Navigation Links */}
           <nav className="sidebar-nav-links">
             <button
               type="button"
               className="sidebar-nav-item active"
               onClick={() => {
-                setActiveCapsule('flights');
                 if (isMobile) setMobileActiveTab('chat');
               }}
             >
-              <Compass size={17} />
-              <span>Trip Planner</span>
+              <MessageSquare size={16} />
+              <span>Chat Planner</span>
+            </button>
+
+            <button
+              type="button"
+              className="sidebar-nav-item secondary"
+              onClick={() => {
+                if (isMobile) setMobileActiveTab('chat');
+              }}
+            >
+              <Folder size={16} />
+              <span>My Trips</span>
             </button>
           </nav>
         </div>
 
-        {/* Bottom Section: Borderless Theme Toggle */}
+        {/* Bottom Section: Explore India Your Way + Monument Icon */}
         <div className="sidebar-bottom">
+          <div className="sidebar-campaign-badge">
+            <Landmark size={36} strokeWidth={1.4} className="campaign-monument-icon" />
+            <div className="campaign-text-group">
+              <span className="campaign-heading">Explore India</span>
+              <span className="campaign-subheading">Your Way</span>
+              <svg className="campaign-arc" viewBox="0 0 64 6" fill="none">
+                <path d="M2 4C20 1 44 1 62 4" stroke="#F59E0B" strokeWidth="2.5" strokeLinecap="round" />
+              </svg>
+            </div>
+          </div>
+
           <button
             type="button"
             className="sidebar-theme-toggle-btn"
@@ -621,7 +647,7 @@ export default function App() {
             title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
             aria-label="Toggle theme"
           >
-            {isDarkMode ? <Sun size={20} strokeWidth={1.8} /> : <Moon size={20} strokeWidth={1.8} />}
+            {isDarkMode ? <Sun size={18} strokeWidth={1.8} /> : <Moon size={18} strokeWidth={1.8} />}
             <span className="theme-toggle-label">
               {isDarkMode ? "Light Mode" : "Dark Mode"}
             </span>
@@ -660,285 +686,254 @@ export default function App() {
             {/* Scrollable Chat Area */}
             <div className="chat-feed" ref={chatScrollRef}>
               {/* INITIAL GREETING MESSAGE & EMBEDDED TRIP PLANNER INPUT CARD */}
-              <div className="message-row assistant">
-                <div className="avatar-bot">
-                  <Bot size={17} />
+              <div className="message-row assistant intro-row">
+                {/* BOT GREETING SPEECH BUBBLE */}
+                <div className="bot-welcome-row">
+                  <div className="avatar-bot-round">
+                    <Bot size={22} />
+                  </div>
+                  <div className="bot-speech-bubble">
+                    <div className="bubble-heading">Hi!</div>
+                    <div className="bubble-text">I'm your travel assistant.</div>
+                    <div className="bubble-text">Where would you like to go?</div>
+                  </div>
                 </div>
-                <div className="greeting-card">
-                  <div className="greeting-header">
-                    <div className="greeting-header-row">
-                      <h3>Namaste! Where would you like to travel?</h3>
-                      <button
-                        type="button"
-                        className="reset-trip-link"
-                        onClick={handleResetAll}
-                        title="Reset and clear trip form"
-                      >
-                        <RotateCcw size={13} />
-                        <span>Reset</span>
-                      </button>
+
+                <p className="bot-prompt-lead">
+                  Great! I can help plan your trip. Fill in the details below to get started.
+                </p>
+
+                {/* TRIP INPUT FORM CARD EMBEDDED IN CHAT */}
+                <div className="planner-embedded-card">
+                  <div className="planner-card-header">
+                    <div className="planner-card-title">
+                      <Compass size={18} className="gold-compass-icon" />
+                      <span>Plan your trip</span>
                     </div>
-                    <p>
-                      I can help you compare live domestic flights, find verified stays, and generate full travel plans across India. Select your route below to get started:
-                    </p>
+                    <button
+                      type="button"
+                      className="reset-trip-link"
+                      onClick={handleResetAll}
+                      title="Reset and clear trip form"
+                    >
+                      <RotateCcw size={13} />
+                      <span>Reset</span>
+                    </button>
                   </div>
 
-                {/* TRIP INPUT SECTION EMBEDDED INSIDE THE CHAT ONLY */}
-                <form className="embedded-trip-form" onSubmit={handlePlanTrip}>
-                  {/* Origin & Destination Grid */}
-                  <div className="form-grid-2">
+                  <form className="embedded-trip-form" onSubmit={handlePlanTrip}>
+                    {/* Row 1: From & To */}
+                    <div className="form-grid-2">
+                      <div className="field-block">
+                        <label>From</label>
+                        <select
+                          value={origin}
+                          onChange={e => handleOriginChange(e.target.value)}
+                          className="clean-select"
+                          required
+                        >
+                          <option value="">Type a city...</option>
+                          {cities.map(c => (
+                            <option key={c.label} value={c.value}>{c.label}</option>
+                          ))}
+                        </select>
+                        {multiAirports[origin] && (
+                          <div className="airport-subfield">
+                            <label className="sub-label">Departure Airport</label>
+                            <select
+                              value={originAirport}
+                              onChange={e => setOriginAirport(e.target.value)}
+                              className="sub-dropdown"
+                            >
+                              {multiAirports[origin].map(ap => (
+                                <option key={ap.code} value={ap.code}>{ap.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="field-block">
+                        <label>To</label>
+                        <select
+                          value={destination}
+                          onChange={e => handleDestinationChange(e.target.value)}
+                          className="clean-select"
+                          required
+                        >
+                          <option value="">Type a city...</option>
+                          {cities.map(c => (
+                            <option key={c.label} value={c.value}>{c.label}</option>
+                          ))}
+                        </select>
+                        {multiAirports[destination] && (
+                          <div className="airport-subfield">
+                            <label className="sub-label">Arrival Airport</label>
+                            <select
+                              value={destinationAirport}
+                              onChange={e => setDestinationAirport(e.target.value)}
+                              className="sub-dropdown"
+                            >
+                              {multiAirports[destination].map(ap => (
+                                <option key={ap.code} value={ap.code}>{ap.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Row 2: Travel type pills */}
                     <div className="field-block">
-                      <label>From (Origin)</label>
-                      <select
-                        value={origin}
-                        onChange={e => handleOriginChange(e.target.value)}
-                        required
-                      >
-                        <option value="">Select origin city...</option>
-                        {cities.map(c => (
-                          <option key={c.label} value={c.value}>{c.label}</option>
-                        ))}
-                      </select>
-                      {multiAirports[origin] && (
-                        <div className="airport-subfield">
-                          <label className="sub-label">Departure Airport</label>
-                          <select
-                            value={originAirport}
-                            onChange={e => setOriginAirport(e.target.value)}
-                            className="sub-dropdown"
-                          >
-                            {multiAirports[origin].map(ap => (
-                              <option key={ap.code} value={ap.code}>{ap.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
+                      <label>Travel type</label>
+                      <div className="travel-type-pills">
+                        <button
+                          type="button"
+                          className={`travel-type-pill ${tripType === 'round_trip' ? 'active' : ''}`}
+                          onClick={() => setTripType('round_trip')}
+                        >
+                          <span className="pill-symbol">⇄</span>
+                          <span>Round trip</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`travel-type-pill ${tripType === 'one_way' ? 'active' : ''}`}
+                          onClick={() => setTripType('one_way')}
+                        >
+                          <span className="pill-symbol">—</span>
+                          <span>One-way</span>
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="field-block">
-                      <label>To (Destination)</label>
-                      <select
-                        value={destination}
-                        onChange={e => handleDestinationChange(e.target.value)}
-                        required
-                      >
-                        <option value="">Select destination city...</option>
-                        {cities.map(c => (
-                          <option key={c.label} value={c.value}>{c.label}</option>
-                        ))}
-                      </select>
-                      {multiAirports[destination] && (
-                        <div className="airport-subfield">
-                          <label className="sub-label">Arrival Airport</label>
-                          <select
-                            value={destinationAirport}
-                            onChange={e => setDestinationAirport(e.target.value)}
-                            className="sub-dropdown"
-                          >
-                            {multiAirports[destination].map(ap => (
-                              <option key={ap.code} value={ap.code}>{ap.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Travel Type: One Way vs Round Trip */}
-                  <div className="field-block">
-                    <label>Travel Type</label>
-                    <div className="segmented-toggle">
-                      <button
-                        type="button"
-                        className={`segment-btn ${tripType === 'one_way' ? 'active' : ''}`}
-                        onClick={() => setTripType('one_way')}
-                      >
-                        One Way
-                      </button>
-                      <button
-                        type="button"
-                        className={`segment-btn ${tripType === 'round_trip' ? 'active' : ''}`}
-                        onClick={() => setTripType('round_trip')}
-                      >
-                        Round Trip
-                      </button>
-                    </div>
-
-                    {/* If One-Way: Option for 7-Day Flights Only vs Full Trip Plan */}
-                    {tripType === 'one_way' && (
-                      <div className="submode-box">
-                        <span className="sub-label">One-Way Feature Mode:</span>
-                        <div className="segmented-toggle small">
+                    {/* Row 3: Travellers stepper & Budget (optional) */}
+                    <div className="form-grid-2">
+                      <div className="field-block">
+                        <label>Travellers</label>
+                        <div className="stepper-field">
                           <button
                             type="button"
-                            className={`segment-btn ${flightsOnly ? 'active' : ''}`}
-                            onClick={() => setFlightsOnly(true)}
+                            className="stepper-btn"
+                            onClick={() => setTravellers(prev => Math.max(1, prev - 1))}
+                            disabled={travellers <= 1}
                           >
-                            7-Day Flight Fare Calendar
+                            <Minus size={13} />
                           </button>
+                          <span className="stepper-val">{travellers}</span>
                           <button
                             type="button"
-                            className={`segment-btn ${!flightsOnly ? 'active' : ''}`}
-                            onClick={() => setFlightsOnly(false)}
+                            className="stepper-btn"
+                            onClick={() => setTravellers(prev => Math.min(9, prev + 1))}
+                            disabled={travellers >= 9}
                           >
-                            Full Travel Plan
+                            <Plus size={13} />
                           </button>
                         </div>
                       </div>
-                    )}
-                  </div>
 
-                  {/* Date Selection: If One-Way, REMOVE Return Date completely! */}
-                  <div className="form-grid-2">
-                    <div className="field-block">
-                      <label>
-                        {tripType === 'one_way' && flightsOnly ? 'Start Date (7-Day Window)' : 'Departure Date'}
-                      </label>
-                      <input
-                        type="date"
-                        min={formatDate(today)}
-                        value={departureDate}
-                        onChange={e => {
-                          setDepartureDate(e.target.value);
-                          if (returnDate < e.target.value) {
-                            setReturnDate(e.target.value);
-                          }
-                        }}
-                        required
-                      />
+                      <div className="field-block">
+                        <label>Budget (optional)</label>
+                        <div className="budget-input-wrapper">
+                          <input
+                            type="text"
+                            placeholder="₹ e.g. 30000"
+                            value={budget}
+                            onChange={e => setBudget(e.target.value)}
+                            className="clean-input"
+                          />
+                        </div>
+                      </div>
                     </div>
 
-                    {/* ONLY DISPLAY RETURN DATE IF ROUND TRIP */}
-                    {tripType === 'round_trip' ? (
+                    {/* Row 4: Departure & Return dates */}
+                    <div className="form-grid-2">
                       <div className="field-block">
-                        <label>Return Date</label>
+                        <label>Departure</label>
                         <input
                           type="date"
-                          min={departureDate}
-                          value={returnDate}
-                          onChange={e => setReturnDate(e.target.value)}
+                          min={formatDate(today)}
+                          value={departureDate}
+                          onChange={e => {
+                            setDepartureDate(e.target.value);
+                            if (returnDate < e.target.value) {
+                              setReturnDate(e.target.value);
+                            }
+                          }}
+                          className="clean-input"
                           required
                         />
                       </div>
-                    ) : (
+
                       <div className="field-block">
-                        <label>Return Date</label>
-                        <div className="one-way-notice">
-                          <span>Not applicable for One Way travel</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Travellers & Budget */}
-                  <div className="form-grid-2">
-                    <div className="field-block">
-                      <label>Travellers</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="9"
-                        value={travellers}
-                        onChange={e => setTravellers(Math.max(1, parseInt(e.target.value) || 1))}
-                        required
-                      />
-                    </div>
-
-                    <div className="field-block">
-                      <label>Budget (₹ Optional)</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. 25000"
-                        value={budget}
-                        onChange={e => setBudget(e.target.value)}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Hotel Preference (only when full trip plan) */}
-                  {!(tripType === 'one_way' && flightsOnly) && (
-                    <div className="field-block">
-                      <label>Hotel Preference</label>
-                      <div className="segmented-toggle">
-                        <button
-                          type="button"
-                          className={`segment-btn ${hotelPreference === 'tourist_attraction' ? 'active' : ''}`}
-                          onClick={() => setHotelPreference('tourist_attraction')}
-                        >
-                          City Center Sights
-                        </button>
-                        <button
-                          type="button"
-                          className={`segment-btn ${hotelPreference === 'near_airport' ? 'active' : ''}`}
-                          onClick={() => setHotelPreference('near_airport')}
-                        >
-                          Airport / Transit Hub
-                        </button>
+                        <label>Return</label>
+                        {tripType === 'round_trip' ? (
+                          <input
+                            type="date"
+                            min={departureDate}
+                            value={returnDate}
+                            onChange={e => setReturnDate(e.target.value)}
+                            className="clean-input"
+                            required
+                          />
+                        ) : (
+                          <div className="clean-input disabled-placeholder">
+                            <span>One-way</span>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  )}
 
-                  {/* Form Submit Button */}
-                  <button
-                    type="submit"
-                    className="submit-trip-btn"
-                    disabled={isLoading}
-                  >
-                    <Plane size={16} />
-                    <span>
-                      {isLoading
-                        ? (tripType === 'one_way' && flightsOnly ? 'Searching 7-Day Live Flights...' : 'Generating Travel Itinerary...')
-                        : (tripType === 'one_way' && flightsOnly ? 'Search 7-Day Flights & Fares' : 'Generate Full Travel Itinerary')}
-                    </span>
-                  </button>
-                </form>
+                    {/* Submit Trip Button */}
+                    <button
+                      type="submit"
+                      className="submit-trip-btn"
+                      disabled={isLoading}
+                    >
+                      <Plane size={16} />
+                      <span>
+                        {isLoading
+                          ? 'Finding Flights & Travel Options...'
+                          : 'Find Flights & Plan Itinerary'}
+                      </span>
+                    </button>
+                  </form>
 
-                {/* Popular Indian Quick Routes */}
-                <div className="quick-suggestions">
-                  <span className="suggestion-label">Quick select:</span>
-                  <button
-                    type="button"
-                    className="quick-chip"
-                    onClick={() => {
-                      handleOriginChange('Delhi');
-                      handleDestinationChange('Goa');
-                    }}
-                  >
-                    Delhi → Goa
-                  </button>
-                  <button
-                    type="button"
-                    className="quick-chip"
-                    onClick={() => {
-                      handleOriginChange('Mumbai');
-                      handleDestinationChange('Jaipur');
-                    }}
-                  >
-                    Mumbai → Jaipur
-                  </button>
-                  <button
-                    type="button"
-                    className="quick-chip"
-                    onClick={() => {
-                      handleOriginChange('Hyderabad');
-                      handleDestinationChange('Patna');
-                    }}
-                  >
-                    Hyderabad → Patna
-                  </button>
-                  <button
-                    type="button"
-                    className="quick-chip"
-                    onClick={() => {
-                      handleOriginChange('Bengaluru');
-                      handleDestinationChange('Kochi');
-                    }}
-                  >
-                    Bengaluru → Kochi
-                  </button>
+                  {/* Popular Quick Routes */}
+                  <div className="quick-suggestions">
+                    <span className="suggestion-label">Quick select:</span>
+                    <button
+                      type="button"
+                      className="quick-chip"
+                      onClick={() => {
+                        handleOriginChange('Delhi');
+                        handleDestinationChange('Udaipur');
+                      }}
+                    >
+                      Delhi → Udaipur
+                    </button>
+                    <button
+                      type="button"
+                      className="quick-chip"
+                      onClick={() => {
+                        handleOriginChange('Mumbai');
+                        handleDestinationChange('Jaipur');
+                      }}
+                    >
+                      Mumbai → Jaipur
+                    </button>
+                    <button
+                      type="button"
+                      className="quick-chip"
+                      onClick={() => {
+                        handleOriginChange('Delhi');
+                        handleDestinationChange('Goa');
+                      }}
+                    >
+                      Delhi → Goa
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
 
             {/* CONVERSATION MESSAGES */}
             {messages.map((msg, index) => {
@@ -1098,41 +1093,33 @@ export default function App() {
           </div>
 
           {/* ================= BOTTOM PROMPT INPUT SECTION ================= */}
-          {/* Active only after submitting trip details, otherwise inactive/locked */}
-          <div className={`chat-prompt-bar ${!hasSearched ? 'prompt-locked' : 'prompt-active'}`}>
-            <form className="prompt-form" onSubmit={handleSendMessage}>
-              <input
-                type="text"
-                placeholder={
-                  hasSearched
-                    ? "Ask follow-ups, refine your itinerary, or explore local tips..."
-                    : "Fill and submit your trip details above to start chatting..."
-                }
-                value={inputText}
-                onChange={e => setInputText(e.target.value)}
-                disabled={isLoading || !hasSearched}
-              />
-              <button
-                type="submit"
-                className="prompt-send-btn"
-                disabled={isLoading || !hasSearched || !inputText.trim()}
-                title={hasSearched ? "Send message" : "Submit trip details first"}
-              >
-                <Send size={15} />
-              </button>
-            </form>
-
-            {!hasSearched && (
-              <div className="prompt-lock-explanation">
-                <span>The prompt bar will unlock after you search flights or generate an itinerary.</span>
+          <div className="chat-prompt-bar clean-bar">
+            <form className="clean-prompt-form" onSubmit={handleSendMessage}>
+              <div className="clean-input-inner">
+                <Sparkles size={16} className="clean-sparkle-icon" />
+                <input
+                  type="text"
+                  placeholder="Ask anything..."
+                  value={inputText}
+                  onChange={e => setInputText(e.target.value)}
+                  disabled={isLoading}
+                />
+                <button
+                  type="submit"
+                  className="clean-circle-send"
+                  disabled={isLoading || !inputText.trim()}
+                  title="Send message"
+                >
+                  <Send size={14} />
+                </button>
               </div>
-            )}
+            </form>
           </div>
         </div>
 
         {/* ================= RIGHT 50% PANEL: VISUAL BANNER & 4-CAPSULE EXPLORER ================= */}
         <div className={`panel-right ${isMobile && mobileActiveTab !== 'explorer' ? 'hidden-mobile' : ''}`}>
-          {/* TOP 30-35% HEIGHT: VISUAL HERO BANNER (AUTOSLIDES EVERY 10 SECONDS) */}
+          {/* TOP: VISUAL HERO BANNER */}
           <div className="hero-banner-section">
             <div
               className="hero-banner-image"
@@ -1140,10 +1127,11 @@ export default function App() {
             >
               <div className="hero-banner-overlay" />
               
-              {/* Minimalist: Location Name, City, and One-Line Description */}
               <div className="hero-content">
-                <h2 className="hero-title">{currentBanner.title}</h2>
-                <p className="hero-tagline">{currentBanner.tagline}</p>
+                <span className="hero-eyebrow">Explore India</span>
+                <h2 className="hero-title">
+                  {destination || (currentBanner?.title?.includes(',') ? currentBanner.title.split(',')[1].trim() : 'Udaipur')}
+                </h2>
               </div>
             </div>
           </div>
@@ -1156,9 +1144,8 @@ export default function App() {
                 className={`capsule-btn ${activeCapsule === 'flights' ? 'active' : ''}`}
                 onClick={() => setActiveCapsule('flights')}
               >
-                <Plane size={13} />
+                <Plane size={14} />
                 <span>Flights</span>
-                <span className="capsule-badge">{deckData.flights?.length || 0}</span>
               </button>
 
               <button
@@ -1166,9 +1153,8 @@ export default function App() {
                 className={`capsule-btn ${activeCapsule === 'hotels' ? 'active' : ''}`}
                 onClick={() => setActiveCapsule('hotels')}
               >
-                <Hotel size={13} />
+                <Hotel size={14} />
                 <span>Hotels</span>
-                <span className="capsule-badge">{deckData.hotels?.length || 0}</span>
               </button>
 
               <button
@@ -1176,9 +1162,8 @@ export default function App() {
                 className={`capsule-btn ${activeCapsule === 'restaurants' ? 'active' : ''}`}
                 onClick={() => setActiveCapsule('restaurants')}
               >
-                <Utensils size={13} />
+                <Utensils size={14} />
                 <span>Restaurants</span>
-                <span className="capsule-badge">{deckData.restaurants?.length || 0}</span>
               </button>
 
               <button
@@ -1186,16 +1171,83 @@ export default function App() {
                 className={`capsule-btn ${activeCapsule === 'attractions' ? 'active' : ''}`}
                 onClick={() => setActiveCapsule('attractions')}
               >
-                <Compass size={13} />
-                <span>Attractions</span>
-                <span className="capsule-badge">{deckData.attractions?.length || 0}</span>
+                <MapPin size={14} />
+                <span>Places to Visit</span>
               </button>
             </div>
           </div>
 
-          {/* BOTTOM 60-65% HEIGHT: CONTENT AREA FOR ACTIVE CAPSULE */}
-          <div className="capsule-content-deck">
-            {/* 1. FLIGHTS TAB */}
+          {/* BOTTOM DECK: When not searched, show the clean initial state card! */}
+          {!hasSearched ? (
+            <div className="capsule-content-deck">
+              <div className="initial-state-deck-card">
+                <div className="initial-deck-header">
+                  <h3>
+                    {activeCapsule === 'flights' && 'Flights'}
+                    {activeCapsule === 'hotels' && 'Hotels'}
+                    {activeCapsule === 'restaurants' && 'Restaurants'}
+                    {activeCapsule === 'attractions' && 'Places to Visit'}
+                  </h3>
+                </div>
+
+                <div className="initial-deck-body">
+                  <div className="initial-deck-thumb-wrap">
+                    <img
+                      src={
+                        activeCapsule === 'flights'
+                          ? "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=400&q=80"
+                          : activeCapsule === 'hotels'
+                            ? "https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=400&q=80"
+                            : activeCapsule === 'restaurants'
+                              ? "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=400&q=80"
+                              : "https://images.unsplash.com/photo-1599661046289-e31897846e41?auto=format&fit=crop&w=400&q=80"
+                      }
+                      alt={activeCapsule}
+                      className="initial-deck-thumb"
+                    />
+                    <span className="illustrative-tag">Illustrative photo</span>
+                  </div>
+
+                  <div className="initial-deck-content">
+                    {activeCapsule === 'flights' && (
+                      <>
+                        <h4 className="initial-deck-title">Find flights for your route</h4>
+                        <p className="initial-deck-desc">
+                          Choose your cities and travel dates to compare airlines and departure times.
+                        </p>
+                      </>
+                    )}
+                    {activeCapsule === 'hotels' && (
+                      <>
+                        <h4 className="initial-deck-title">Find a place to stay</h4>
+                        <p className="initial-deck-desc">
+                          Plan an overnight trip to compare available hotels and nightly rates.
+                        </p>
+                      </>
+                    )}
+                    {activeCapsule === 'restaurants' && (
+                      <>
+                        <h4 className="initial-deck-title">Find places to eat</h4>
+                        <p className="initial-deck-desc">
+                          Choose a destination to discover nearby restaurants and see them on the map.
+                        </p>
+                      </>
+                    )}
+                    {activeCapsule === 'attractions' && (
+                      <>
+                        <h4 className="initial-deck-title">Find places to visit</h4>
+                        <p className="initial-deck-desc">
+                          Plan a trip to discover nearby sights and open their locations in Maps.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="capsule-content-deck">
+              {/* 1. FLIGHTS TAB */}
             {activeCapsule === 'flights' && (
               <div className="deck-scrollable">
                 <div className="deck-header-row">
@@ -1541,6 +1593,7 @@ export default function App() {
               </div>
             )}
           </div>
+        )}
         </div>
       </div>
     </div>

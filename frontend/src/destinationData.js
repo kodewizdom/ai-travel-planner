@@ -2,11 +2,11 @@
 
 export const DEFAULT_INDIA_BANNERS = [
   {
-    title: "Taj Mahal, Agra",
-    state: "Uttar Pradesh",
-    tagline: "Symbol of eternal architectural wonder",
-    image: "https://images.unsplash.com/photo-1564507592333-c60657eea523?auto=format&fit=crop&w=1200&q=80",
-    highlights: ["Mughal Architecture", "UNESCO World Heritage", "Sunrise Views"]
+    title: "City Palace, Udaipur",
+    state: "Rajasthan",
+    tagline: "Illuminated grandeur on the serene banks of Lake Pichola",
+    image: "https://images.unsplash.com/photo-1615836245337-f5b9b2303f10?auto=format&fit=crop&w=1200&q=80",
+    highlights: ["Lake Pichola", "City Palace", "Jag Mandir"]
   },
   {
     title: "Hawa Mahal, Jaipur",
@@ -46,6 +46,160 @@ export const DEFAULT_INDIA_BANNERS = [
 ];
 
 export const DESTINATION_DETAILS = {
+  "Udaipur": {
+    banners: [
+      {
+        title: "City Palace, Udaipur",
+        state: "Rajasthan",
+        tagline: "Illuminated grandeur on the serene banks of Lake Pichola",
+        image: "https://images.unsplash.com/photo-1615836245337-f5b9b2303f10?auto=format&fit=crop&w=1200&q=80",
+        highlights: ["Lake Pichola", "City Palace", "Jag Mandir"]
+      },
+      {
+        title: "Lake Pichola & Jag Mandir",
+        state: "Rajasthan",
+        tagline: "Historic island palace amidst shimmering waters",
+        image: "https://images.unsplash.com/photo-1595846519845-68e298c2edd8?auto=format&fit=crop&w=1200&q=80",
+        highlights: ["Sunset Boat Cruises", "Island Palace", "Panoramic Aravalli Hills"]
+      }
+    ],
+    flights: [
+      {
+        airline: "IndiGo",
+        flightNo: "6E-720",
+        departureTime: "06:30",
+        arrivalTime: "08:45",
+        duration: "2h 15m",
+        stops: "Non-stop",
+        price: 4890,
+        aircraft: "Airbus A320neo",
+        baggage: "7kg Cabin · 15kg Check-in",
+        status: "Top Value"
+      },
+      {
+        airline: "Air India",
+        flightNo: "AI-471",
+        departureTime: "13:10",
+        arrivalTime: "15:25",
+        duration: "2h 15m",
+        stops: "Non-stop",
+        price: 5450,
+        aircraft: "Airbus A320",
+        baggage: "7kg Cabin · 25kg Check-in",
+        status: "Free Meal"
+      },
+      {
+        airline: "SpiceJet",
+        flightNo: "SG-2831",
+        departureTime: "17:45",
+        arrivalTime: "20:00",
+        duration: "2h 15m",
+        stops: "Non-stop",
+        price: 4320,
+        aircraft: "Boeing 737-800",
+        baggage: "7kg Cabin · 15kg Check-in",
+        status: "Cheapest"
+      }
+    ],
+    hotels: [
+      {
+        name: "Taj Lake Palace",
+        category: "5-Star Heritage Luxury",
+        location: "Lake Pichola, Udaipur",
+        rating: 4.9,
+        reviewsCount: 3820,
+        pricePerNight: 28500,
+        amenities: ["Island Palace", "Royal Butler Service", "Heritage Spa", "Fine Dining"],
+        description: "An iconic 18th-century marble palace floating serenely on Lake Pichola with world-class hospitality."
+      },
+      {
+        name: "The Oberoi Udaivilas",
+        category: "5-Star Premier Palace Resort",
+        location: "Haridas Ji Ki Magri, Udaipur",
+        rating: 4.9,
+        reviewsCount: 4150,
+        pricePerNight: 32000,
+        amenities: ["Private Pool Suites", "Aravalli Views", "Luxury Spa", "Lakeside Pavilions"],
+        description: "Opulent palatial courtyards, decorative fountains, and sprawling reflection pools overlooking Lake Pichola."
+      },
+      {
+        name: "Jagat Niwas Palace",
+        category: "Heritage Haveli Stay",
+        location: "Lal Ghat, Udaipur",
+        rating: 4.6,
+        reviewsCount: 1650,
+        pricePerNight: 6800,
+        amenities: ["Jharokha Lake Views", "Rooftop Restaurant", "Ayurvedic Center", "Old City Location"],
+        description: "Restored 17th-century haveli situated directly on the eastern banks with quintessential Mewar charm."
+      }
+    ],
+    restaurants: [
+      {
+        name: "Ambrai Restaurant",
+        cuisine: "North Indian & Mewari Specialties",
+        location: "Amet Haveli, Lake Pichola",
+        rating: 4.8,
+        reviewsCount: 5200,
+        priceForTwo: 2200,
+        mustTry: ["Laal Maas", "Mewari Kadhai Paneer", "Ambrai Chicken", "Garlic Naan"],
+        ambience: "Legendary waterfront open-air dining with uninterrupted views of City Palace and Lake Palace."
+      },
+      {
+        name: "Upre by 1559 AD",
+        cuisine: "Rajasthani & Continental Dining",
+        location: "Roof Top Lake Pichola Hotel, Outside Chandpole",
+        rating: 4.7,
+        reviewsCount: 3400,
+        priceForTwo: 1900,
+        mustTry: ["Rajasthani Thali", "Ker Sangri", "Stuffed Malai Kofta"],
+        ambience: "Romantic rooftop cabanas with panoramic city vistas and authentic royal recipes."
+      },
+      {
+        name: "Millets of Mewar",
+        cuisine: "Healthy Organic & Traditional Rajasthani",
+        location: "Hanuman Ghat, Udaipur",
+        rating: 4.6,
+        reviewsCount: 1980,
+        priceForTwo: 850,
+        mustTry: ["Millet Roti Thali", "Raw Papaya Salad", "Local Kheer"],
+        ambience: "Health-focused, eco-friendly cafe serving gluten-free and regional heritage delicacies."
+      }
+    ],
+    attractions: [
+      {
+        name: "City Palace Complex",
+        category: "Royal Heritage & Museum",
+        location: "Old City, Udaipur",
+        timings: "09:00 AM - 05:30 PM",
+        entryFee: "₹300 (Adults)",
+        highlights: "Rajasthan's largest palace complex featuring ornate courtyards, mirror-work pavilions, and panoramic lake vistas."
+      },
+      {
+        name: "Lake Pichola & Jag Mandir",
+        category: "Scenic Lake & Island Landmark",
+        location: "Lake Pichola, Udaipur",
+        timings: "09:00 AM - 06:00 PM",
+        entryFee: "₹400 (Boat Ride)",
+        highlights: "Picturesque boat cruises offering views of royal ghats, floating palaces, and dramatic sunset over Aravalli hills."
+      },
+      {
+        name: "Saheliyon-ki-Bari",
+        category: "Historical Royal Gardens",
+        location: "Saheli Marg, Udaipur",
+        timings: "08:00 AM - 07:00 PM",
+        entryFee: "₹20 (Indians)",
+        highlights: "Historic lush gardens constructed with marble elephant fountains, lotus pools, and shaded pavilions."
+      },
+      {
+        name: "Bagore Ki Haveli",
+        category: "Cultural Museum & Folk Dance",
+        location: "Gangaur Ghat, Udaipur",
+        timings: "09:30 AM - 05:30 PM (Dharohar Dance: 07:00 PM)",
+        entryFee: "₹100 (Day Museum) · ₹150 (Evening Show)",
+        highlights: "18th-century lakeside haveli hosting nightly vibrant Rajasthani Dharohar folk and puppet performances."
+      }
+    ]
+  },
   "Goa": {
     banners: [
       {
