@@ -1,5 +1,65 @@
 // Curated destination data, imagery, and attractions for Indian domestic destinations
 
+export const DESTINATION_IMAGES = {
+  "patna": "https://images.unsplash.com/photo-1622308644420-a661ea02e865?auto=format&fit=crop&w=1500&q=85",
+  "amritsar": "https://images.unsplash.com/photo-1588096344356-9b59e77ef791?auto=format&fit=crop&w=1500&q=85",
+  "varanasi": "https://images.unsplash.com/photo-1561361513-2d000a50f0dc?auto=format&fit=crop&w=1500&q=85",
+  "delhi": "https://images.unsplash.com/photo-1587474260584-136574528ed5?auto=format&fit=crop&w=1500&q=85",
+  "mumbai": "https://images.unsplash.com/photo-1570168007204-dfb528c6958f?auto=format&fit=crop&w=1500&q=85",
+  "jaipur": "https://images.unsplash.com/photo-1599661046289-e31897846e41?auto=format&fit=crop&w=1500&q=85",
+  "udaipur": "https://images.unsplash.com/photo-1615836245337-f5b9b2303f10?auto=format&fit=crop&w=1500&q=85",
+  "agra": "https://images.unsplash.com/photo-1564507592333-c60657eea523?auto=format&fit=crop&w=1500&q=85",
+  "goa": "https://images.unsplash.com/photo-1512343879784-a960bf40e7f2?auto=format&fit=crop&w=1500&q=85",
+  "bengaluru": "https://images.unsplash.com/photo-1596176530529-78163a4f7af2?auto=format&fit=crop&w=1500&q=85",
+  "bangalore": "https://images.unsplash.com/photo-1596176530529-78163a4f7af2?auto=format&fit=crop&w=1500&q=85",
+  "hyderabad": "https://images.unsplash.com/photo-1605649487212-47bdab064df7?auto=format&fit=crop&w=1500&q=85",
+  "kolkata": "https://images.unsplash.com/photo-1558431382-27e303142255?auto=format&fit=crop&w=1500&q=85",
+  "chennai": "https://images.unsplash.com/photo-1582510003544-4d00b7f74220?auto=format&fit=crop&w=1500&q=85",
+  "srinagar": "https://images.unsplash.com/photo-1598091383021-15ddea10925d?auto=format&fit=crop&w=1500&q=85",
+  "kochi": "https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?auto=format&fit=crop&w=1500&q=85",
+  "cochin": "https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?auto=format&fit=crop&w=1500&q=85",
+  "shimla": "https://images.unsplash.com/photo-1597074866923-dc0589150358?auto=format&fit=crop&w=1500&q=85",
+  "manali": "https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=1500&q=85",
+  "rishikesh": "https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?auto=format&fit=crop&w=1500&q=85",
+  "lucknow": "https://images.unsplash.com/photo-1610444583714-411652438b81?auto=format&fit=crop&w=1500&q=85",
+  "ahmedabad": "https://images.unsplash.com/photo-1609137144822-45e051c72097?auto=format&fit=crop&w=1500&q=85",
+  "pune": "https://images.unsplash.com/photo-1609137144822-45e051c72097?auto=format&fit=crop&w=1500&q=85",
+  "chandigarh": "https://images.unsplash.com/photo-1588416936097-41850ab3d86d?auto=format&fit=crop&w=1500&q=85",
+  "bhopal": "https://images.unsplash.com/photo-1622308644420-a661ea02e865?auto=format&fit=crop&w=1500&q=85",
+  "bhubaneswar": "https://images.unsplash.com/photo-1609137144822-45e051c72097?auto=format&fit=crop&w=1500&q=85",
+  "indore": "https://images.unsplash.com/photo-1609137144822-45e051c72097?auto=format&fit=crop&w=1500&q=85",
+  "ooty": "https://images.unsplash.com/photo-1589182373726-e4f658ab50f0?auto=format&fit=crop&w=1500&q=85",
+  "darjeeling": "https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=1500&q=85",
+  "alleppey": "https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?auto=format&fit=crop&w=1500&q=85"
+};
+
+const wikiImageCache = {};
+
+export async function fetchWikipediaImage(city) {
+  if (!city) return null;
+  const cleanCity = city.split(',')[0].replace(/\([^)]*\)/g, '').trim();
+  if (wikiImageCache[cleanCity] !== undefined) return wikiImageCache[cleanCity];
+
+  try {
+    const url = `https://en.wikipedia.org/w/api.php?action=query&prop=pageimages&piprop=thumbnail&pithumbsize=1500&redirects=1&format=json&origin=*&titles=${encodeURIComponent(cleanCity)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const page = Object.values(data?.query?.pages || {})[0];
+    const src = page?.thumbnail?.source || null;
+    wikiImageCache[cleanCity] = src;
+    return src;
+  } catch {
+    wikiImageCache[cleanCity] = null;
+    return null;
+  }
+}
+
+export function getCityHeroImage(city) {
+  if (!city) return null;
+  const key = city.split(',')[0].replace(/\([^)]*\)/g, '').trim().toLowerCase();
+  return DESTINATION_IMAGES[key] || null;
+}
+
 export const DEFAULT_INDIA_BANNERS = [
   {
     title: "City Palace, Udaipur",

@@ -158,6 +158,33 @@ def handle_chat(req: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def format_flight_card(opt: dict[str, Any], leg_orig: str, leg_dest: str, leg_date: str | None, data_source: str, is_live: bool) -> dict[str, Any]:
+    airline = opt.get("airline", "Domestic Carrier")
+    flight_no = opt.get("flightNo") or opt.get("flight_number") or ""
+    dep_time = opt.get("departureTime") or opt.get("departure", "07:00")
+    arr_time = opt.get("arrivalTime") or opt.get("arrival", "09:15")
+    duration = opt.get("duration", "2h 15m")
+    stops = opt.get("stops", "Non-stop")
+    price = int(opt.get("price", 5490))
+    return {
+        "airline": airline,
+        "flightNo": flight_no,
+        "departureTime": dep_time,
+        "arrivalTime": arr_time,
+        "duration": duration,
+        "stops": stops,
+        "price": price,
+        "aircraft": opt.get("aircraft", "Airbus A320neo"),
+        "baggage": opt.get("baggage", "7kg Cabin · 15kg Check-in"),
+        "origin": leg_orig,
+        "destination": leg_dest,
+        "route": f"{leg_orig} → {leg_dest}",
+        "date": leg_date or "",
+        "isLive": is_live,
+        "dataSource": data_source,
+    }
+
+
 @app.post("/api/flights")
 def get_flights(req: FlightSearchRequest):
     try:
@@ -172,26 +199,24 @@ def get_flights(req: FlightSearchRequest):
             currency="INR",
             trip_type=req.trip_type,
         )
-        options = flight_result.get("options") or flight_result.get("outbound") or []
-        flights = []
-        for opt in options:
-            flights.append({
-                "airline": opt.get("airline", "Domestic Carrier"),
-                "flightNo": opt.get("flightNo") or opt.get("flight_number", ""),
-                "departureTime": opt.get("departureTime") or opt.get("departure", "07:00"),
-                "arrivalTime": opt.get("arrivalTime") or opt.get("arrival", "09:15"),
-                "duration": opt.get("duration", "2h 15m"),
-                "stops": opt.get("stops", "Non-stop"),
-                "price": int(opt.get("price", 5490)),
-                "aircraft": opt.get("aircraft", "Airbus A320neo"),
-                "baggage": opt.get("baggage", "7kg Cabin · 15kg Check-in"),
-                "isLive": flight_result.get("live_pricing", False) or "Live" in str(flight_result.get("data_source", "")),
-                "dataSource": flight_result.get("data_source", "Google Flights"),
-            })
+        data_source = flight_result.get("data_source", "Google Flights")
+        is_live = flight_result.get("live_pricing", False) or "Live" in str(data_source)
+        
+        outbound_raw = flight_result.get("outbound_flights") or flight_result.get("options") or []
+        return_raw = flight_result.get("return_flights") or [] if req.trip_type == "round_trip" else []
+        
+        outbound_flights = [format_flight_card(opt, orig, dest, req.departure_date, data_source, is_live) for opt in outbound_raw]
+        return_flights = [format_flight_card(opt, dest, orig, req.return_date, data_source, is_live) for opt in return_raw]
+
         return {
             "status": "success",
-            "flights": flights,
-            "data_source": flight_result.get("data_source", "Google Flights"),
+            "trip_type": req.trip_type,
+            "departure_date": req.departure_date,
+            "return_date": req.return_date if req.trip_type == "round_trip" else None,
+            "flights": outbound_flights,
+            "outbound_flights": outbound_flights,
+            "return_flights": return_flights,
+            "data_source": data_source,
             "booking_link": flight_result.get("booking_link"),
         }
     except Exception as e:
@@ -199,6 +224,8 @@ def get_flights(req: FlightSearchRequest):
         return {
             "status": "fallback",
             "flights": [],
+            "outbound_flights": [],
+            "return_flights": [],
             "error": str(e),
         }
 
@@ -342,7 +369,8 @@ def handle_plan(req: PlanRequest):
         )
 
     # Concurrently search live flights & hotels for the right-hand panel
-    live_flights = []
+    live_outbound_flights = []
+    live_return_flights = []
     live_hotels = []
     live_restaurants = []
     live_attractions = []
@@ -360,21 +388,13 @@ def handle_plan(req: PlanRequest):
             trip_type=req.trip_type,
         )
         flight_data_source = flight_result.get("data_source", "Google Flights")
-        options = flight_result.get("options") or flight_result.get("outbound") or []
-        for opt in options:
-            live_flights.append({
-                "airline": opt.get("airline", "Domestic Carrier"),
-                "flightNo": opt.get("flightNo") or opt.get("flight_number", ""),
-                "departureTime": opt.get("departureTime") or opt.get("departure", "07:00"),
-                "arrivalTime": opt.get("arrivalTime") or opt.get("arrival", "09:15"),
-                "duration": opt.get("duration", "2h 15m"),
-                "stops": opt.get("stops", "Non-stop"),
-                "price": int(opt.get("price", 5490)),
-                "aircraft": opt.get("aircraft", "Airbus A320neo"),
-                "baggage": opt.get("baggage", "7kg Cabin · 15kg Check-in"),
-                "isLive": flight_result.get("live_pricing", False) or "Live" in str(flight_result.get("data_source", "")),
-                "dataSource": flight_data_source,
-            })
+        is_live = flight_result.get("live_pricing", False) or "Live" in str(flight_data_source)
+        
+        outbound_raw = flight_result.get("outbound_flights") or flight_result.get("options") or []
+        return_raw = flight_result.get("return_flights") or [] if req.trip_type == "round_trip" else []
+        
+        live_outbound_flights = [format_flight_card(opt, orig, dest, req.departure_date, flight_data_source, is_live) for opt in outbound_raw]
+        live_return_flights = [format_flight_card(opt, dest, orig, req.return_date, flight_data_source, is_live) for opt in return_raw]
     except Exception as fl_err:
         log_step("plan_flights_lookup_err", str(fl_err))
 
@@ -398,8 +418,8 @@ def handle_plan(req: PlanRequest):
         log_step("plan_restaurants_lookup_err", str(r_err))
 
     try:
-        a_res = tools.search_attractions(destination=req.destination, limit=10)
-        live_attractions = a_res.get("attractions") or []
+        a_res = tools.search_attractions(destination=req.destination, limit=7)
+        live_attractions = (a_res.get("attractions") or [])[:7]
     except Exception as a_err:
         log_step("plan_attractions_lookup_err", str(a_err))
 
@@ -408,7 +428,12 @@ def handle_plan(req: PlanRequest):
         return {
             "prompt": form_prompt,
             "reply": reply,
-            "flights": live_flights,
+            "trip_type": req.trip_type,
+            "departure_date": req.departure_date,
+            "return_date": req.return_date if req.trip_type == "round_trip" else None,
+            "flights": live_outbound_flights,
+            "outbound_flights": live_outbound_flights,
+            "return_flights": live_return_flights,
             "hotels": live_hotels,
             "restaurants": live_restaurants,
             "attractions": live_attractions,

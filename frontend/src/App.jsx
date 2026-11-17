@@ -31,7 +31,7 @@ import {
   Plus
 } from 'lucide-react';
 
-import { DEFAULT_INDIA_BANNERS, getDestinationData } from './destinationData';
+import { DEFAULT_INDIA_BANNERS, getDestinationData, getCityHeroImage, fetchWikipediaImage } from './destinationData';
 
 const FALLBACK_CITIES = [
   "Agra", "Ahmedabad", "Amritsar", "Bengaluru (BLR)", "Bhopal", "Bhubaneswar",
@@ -83,6 +83,7 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [isPlanningTrip, setIsPlanningTrip] = useState(false);
+  const [customDestImage, setCustomDestImage] = useState(null);
   const [isChatLoading, setIsChatLoading] = useState(false);
   const isLoading = isPlanningTrip || isChatLoading;
   const [loadingStepIndex, setLoadingStepIndex] = useState(0);
@@ -166,13 +167,13 @@ export default function App() {
       })
       .catch(() => {});
 
-    // 3. Fetch top sights and places to visit for the destination
+    // 3. Fetch top sights and places to visit for the destination (max 7)
     fetch('/api/attractions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         destination,
-        limit: 10
+        limit: 7
       })
     })
       .then(res => res.json())
@@ -180,11 +181,40 @@ export default function App() {
         if (data.attractions && data.attractions.length > 0) {
           setDeckData(prev => ({
             ...prev,
-            attractions: data.attractions
+            attractions: data.attractions.slice(0, 7)
           }));
         }
       })
       .catch(() => {});
+  }, [destination]);
+
+  // Lookup authentic destination photo whenever destination changes
+  useEffect(() => {
+    if (!destination) {
+      setCustomDestImage(null);
+      return;
+    }
+    const known = getCityHeroImage(destination);
+    if (known) {
+      setCustomDestImage(known);
+    } else {
+      let cancelled = false;
+      fetchWikipediaImage(destination).then(url => {
+        if (!cancelled && url) {
+          setCustomDestImage(url);
+        }
+      });
+      return () => { cancelled = true; };
+    }
+  }, [destination]);
+
+  // Auto-rotate Hero Banner every 7 seconds ONLY when exploring (no destination selected)
+  useEffect(() => {
+    if (destination) return;
+    const timer = setInterval(() => {
+      setBannerIndex(prev => (prev + 1) % DEFAULT_INDIA_BANNERS.length);
+    }, 7000);
+    return () => clearInterval(timer);
   }, [destination]);
 
   const banners = destination ? (deckData.banners?.length ? deckData.banners : DEFAULT_INDIA_BANNERS) : DEFAULT_INDIA_BANNERS;
@@ -282,14 +312,6 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
-
-  // Auto-rotate Hero Banner every 10 seconds
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setBannerIndex(prev => (prev + 1) % banners.length);
-    }, 10000);
-    return () => clearInterval(timer);
-  }, [banners.length]);
 
   // Reset banner index when destination changes
   useEffect(() => {
@@ -401,33 +423,18 @@ export default function App() {
         throw new Error(data.detail || 'Failed to generate itinerary');
       }
 
-      if (data.flights && data.flights.length > 0) {
-        setDeckData(prev => ({
-          ...prev,
-          flights: data.flights
-        }));
-      }
-
-      if (data.hotels && data.hotels.length > 0) {
-        setDeckData(prev => ({
-          ...prev,
-          hotels: data.hotels
-        }));
-      }
-
-      if (data.restaurants && data.restaurants.length > 0) {
-        setDeckData(prev => ({
-          ...prev,
-          restaurants: data.restaurants
-        }));
-      }
-
-      if (data.attractions && data.attractions.length > 0) {
-        setDeckData(prev => ({
-          ...prev,
-          attractions: data.attractions
-        }));
-      }
+      setDeckData(prev => ({
+        ...prev,
+        flights: data.outbound_flights || data.flights || prev.flights,
+        outbound_flights: data.outbound_flights || data.flights || prev.outbound_flights,
+        return_flights: data.return_flights || prev.return_flights || [],
+        trip_type: data.trip_type || tripType,
+        departure_date: data.departure_date || departureDate,
+        return_date: data.return_date || returnDate,
+        hotels: (data.hotels && data.hotels.length > 0) ? data.hotels : prev.hotels,
+        restaurants: (data.restaurants && data.restaurants.length > 0) ? data.restaurants : prev.restaurants,
+        attractions: ((data.attractions && data.attractions.length > 0) ? data.attractions : (prev.attractions || [])).slice(0, 7)
+      }));
 
       // Format clean Places to visit message matching reference Image 4!
       const placesList = (data.attractions && data.attractions.length > 0)
@@ -560,11 +567,18 @@ export default function App() {
   };
 
   // Sort flights based on active sort pill
-  const sortedFlights = [...(deckData.flights || [])].sort((a, b) => {
-    if (flightSort === 'cheapest') return a.price - b.price;
-    if (flightSort === 'fastest') return a.duration.localeCompare(b.duration);
-    return 0; // recommended
-  });
+  // Sort flights based on active sort pill
+  const sortFlightList = (list) => {
+    return [...(list || [])].sort((a, b) => {
+      if (flightSort === 'cheapest') return (a.price || 0) - (b.price || 0);
+      if (flightSort === 'fastest') return (a.duration || '').localeCompare(b.duration || '');
+      return 0; // recommended
+    });
+  };
+
+  const sortedOutbound = sortFlightList(deckData.outbound_flights || deckData.flights || []);
+  const sortedReturn = sortFlightList(deckData.return_flights || []);
+  const sortedFlights = sortedOutbound;
 
   // Indian Airport IATA Code Mapping
   const IATA_MAP = {
@@ -630,10 +644,12 @@ export default function App() {
   };
 
   // Generate authentic direct booking portal links (MakeMyTrip, Official Airline, EaseMyTrip)
-  const getFlightBookingPortals = (flight) => {
-    const origIata = resolveIATA(originAirport || origin, 'DEL');
-    const destIata = resolveIATA(destinationAirport || destination, 'GOI');
-    const dDate = departureDate || formatDate(new Date());
+  const getFlightBookingPortals = (flight, isReturn = false) => {
+    const flightOrig = flight?.origin || (isReturn ? destination : origin);
+    const flightDest = flight?.destination || (isReturn ? origin : destination);
+    const origIata = resolveIATA(flightOrig, isReturn ? 'PAT' : 'DEL');
+    const destIata = resolveIATA(flightDest, isReturn ? 'DEL' : 'PAT');
+    const dDate = flight?.date || (isReturn ? (returnDate || departureDate) : (departureDate || formatDate(new Date())));
     const ddmmyyyy = formatPortalDate(dDate);
     const pax = travellers || 1;
 
@@ -675,7 +691,13 @@ export default function App() {
     };
   };
 
-  const currentBanner = banners[bannerIndex] || banners[0];
+  const currentDefaultBanner = DEFAULT_INDIA_BANNERS[bannerIndex % DEFAULT_INDIA_BANNERS.length] || DEFAULT_INDIA_BANNERS[0];
+  const activeHeroImage = destination
+    ? (customDestImage || getCityHeroImage(destination) || currentDefaultBanner.image)
+    : currentDefaultBanner.image;
+  const activeHeroTitle = destination
+    ? destination
+    : (currentDefaultBanner?.title?.includes(',') ? currentDefaultBanner.title.split(',')[1].trim() : (currentDefaultBanner?.title || 'India'));
 
   return (
     <div className="app-viewport">
@@ -1083,15 +1105,13 @@ export default function App() {
           <div className="hero-banner-section">
             <div
               className="hero-banner-image"
-              style={{ backgroundImage: `url(${currentBanner.image})` }}
+              style={{ backgroundImage: `url(${activeHeroImage})` }}
             >
               <div className="hero-banner-overlay" />
               
               <div className="hero-content">
                 <span className="hero-eyebrow">Explore India</span>
-                <h2 className="hero-title">
-                  {destination || (currentBanner?.title?.includes(',') ? currentBanner.title.split(',')[1].trim() : 'Udaipur')}
-                </h2>
+                <h2 className="hero-title">{activeHeroTitle}</h2>
               </div>
             </div>
           </div>
@@ -1262,69 +1282,203 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="cards-grid">
-                  {sortedFlights.map((flight, idx) => (
-                    <div
-                      key={idx}
-                      className="flight-card-compact"
-                      onClick={() => setSelectedItemDetail({ type: 'flight', data: flight })}
-                    >
-                      {/* Left: Airline info & status */}
-                      <div className="compact-airline-col">
-                        <div className="compact-airline-header">
-                          <span className="compact-airline-name">{flight.airline}</span>
-                          <span className="compact-flight-no">{flight.flightNo}</span>
-                        </div>
-                        {flight.status ? (
-                          <span className="compact-tag">{flight.status}</span>
-                        ) : (
-                          <span className="compact-route-tag">{origin || 'Origin'} → {destination || 'Dest'}</span>
-                        )}
+                {(deckData.trip_type === 'round_trip' || tripType === 'round_trip') && sortedReturn.length > 0 ? (
+                  <>
+                    <div className="flight-leg-section">
+                      <div className="flight-leg-header">
+                        <h4>Outbound flights</h4>
+                        <span className="flight-leg-sub">
+                          {origin || 'Origin'} → {destination || 'Destination'} · {deckData.departure_date || departureDate}
+                        </span>
                       </div>
-
-                      {/* Center: Departure time, flight line & Arrival time */}
-                      <div className="compact-times-col">
-                        <div className="compact-time-range">
-                          <span className="compact-time">{flight.departureTime}</span>
-                          <div className="compact-flight-bar">
-                            <span className="compact-duration">{flight.duration}</span>
-                            <div className="compact-line">
-                              <span className="compact-line-dot" />
-                              <Plane size={11} className="compact-line-plane" />
-                              <span className="compact-line-dot" />
+                      <div className="cards-grid">
+                        {sortedOutbound.map((flight, idx) => (
+                          <div
+                            key={idx}
+                            className="flight-card-compact"
+                            onClick={() => setSelectedItemDetail({ type: 'flight', data: flight })}
+                          >
+                            <div className="compact-airline-col">
+                              <div className="compact-airline-header">
+                                <span className="compact-airline-name">{flight.airline}</span>
+                                <span className="compact-flight-no">{flight.flightNo}</span>
+                              </div>
+                              <span className="compact-route-tag">{origin || 'Origin'} → {destination || 'Dest'}</span>
                             </div>
-                            <span className="compact-stops">{flight.stops}</span>
-                          </div>
-                          <span className="compact-time">{flight.arrivalTime}</span>
-                        </div>
-                      </div>
 
-                      {/* Right: Fare & View Details Button */}
-                      <div className="compact-fare-col">
-                        <div className="compact-price">
-                          <span className="compact-curr">₹</span>
-                          <span className="compact-amount">{flight.price.toLocaleString('en-IN')}</span>
-                        </div>
-                        {(() => {
-                          const portals = getFlightBookingPortals(flight);
-                          return (
-                            <a
-                              href={portals.mmt}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="compact-details-btn book-btn"
-                              onClick={(e) => e.stopPropagation()}
-                              title={`Book on MakeMyTrip (${portals.route} · ${portals.dateFormatted})`}
-                            >
-                              <span>Book</span>
-                              <ExternalLink size={11} />
-                            </a>
-                          );
-                        })()}
+                            <div className="compact-times-col">
+                              <div className="compact-time-range">
+                                <span className="compact-time">{flight.departureTime}</span>
+                                <div className="compact-flight-bar">
+                                  <span className="compact-duration">{flight.duration}</span>
+                                  <div className="compact-line">
+                                    <span className="compact-line-dot" />
+                                    <Plane size={11} className="compact-line-plane" />
+                                    <span className="compact-line-dot" />
+                                  </div>
+                                  <span className="compact-stops">{flight.stops}</span>
+                                </div>
+                                <span className="compact-time">{flight.arrivalTime}</span>
+                              </div>
+                            </div>
+
+                            <div className="compact-fare-col">
+                              <div className="compact-price">
+                                <span className="compact-curr">₹</span>
+                                <span className="compact-amount">{(flight.price || 0).toLocaleString('en-IN')}</span>
+                              </div>
+                              {(() => {
+                                const portals = getFlightBookingPortals(flight, false);
+                                return (
+                                  <a
+                                    href={portals.mmt}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="compact-details-btn book-btn"
+                                    onClick={(e) => e.stopPropagation()}
+                                    title={`Book Outbound on MakeMyTrip (${portals.route} · ${portals.dateFormatted})`}
+                                  >
+                                    <span>Book</span>
+                                    <ExternalLink size={11} />
+                                  </a>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  ))}
-                </div>
+
+                    <div className="flight-leg-section" style={{ marginTop: '1.25rem' }}>
+                      <div className="flight-leg-header">
+                        <h4>Return flights</h4>
+                        <span className="flight-leg-sub">
+                          {destination || 'Destination'} → {origin || 'Origin'} · {deckData.return_date || returnDate}
+                        </span>
+                      </div>
+                      <div className="cards-grid">
+                        {sortedReturn.map((flight, idx) => (
+                          <div
+                            key={idx}
+                            className="flight-card-compact"
+                            onClick={() => setSelectedItemDetail({ type: 'flight', data: flight })}
+                          >
+                            <div className="compact-airline-col">
+                              <div className="compact-airline-header">
+                                <span className="compact-airline-name">{flight.airline}</span>
+                                <span className="compact-flight-no">{flight.flightNo}</span>
+                              </div>
+                              <span className="compact-route-tag">{destination || 'Dest'} → {origin || 'Origin'}</span>
+                            </div>
+
+                            <div className="compact-times-col">
+                              <div className="compact-time-range">
+                                <span className="compact-time">{flight.departureTime}</span>
+                                <div className="compact-flight-bar">
+                                  <span className="compact-duration">{flight.duration}</span>
+                                  <div className="compact-line">
+                                    <span className="compact-line-dot" />
+                                    <Plane size={11} className="compact-line-plane" />
+                                    <span className="compact-line-dot" />
+                                  </div>
+                                  <span className="compact-stops">{flight.stops}</span>
+                                </div>
+                                <span className="compact-time">{flight.arrivalTime}</span>
+                              </div>
+                            </div>
+
+                            <div className="compact-fare-col">
+                              <div className="compact-price">
+                                <span className="compact-curr">₹</span>
+                                <span className="compact-amount">{(flight.price || 0).toLocaleString('en-IN')}</span>
+                              </div>
+                              {(() => {
+                                const portals = getFlightBookingPortals(flight, true);
+                                return (
+                                  <a
+                                    href={portals.mmt}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="compact-details-btn book-btn"
+                                    onClick={(e) => e.stopPropagation()}
+                                    title={`Book Return on MakeMyTrip (${portals.route} · ${portals.dateFormatted})`}
+                                  >
+                                    <span>Book</span>
+                                    <ExternalLink size={11} />
+                                  </a>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="cards-grid">
+                    {sortedFlights.map((flight, idx) => (
+                      <div
+                        key={idx}
+                        className="flight-card-compact"
+                        onClick={() => setSelectedItemDetail({ type: 'flight', data: flight })}
+                      >
+                        {/* Left: Airline info & status */}
+                        <div className="compact-airline-col">
+                          <div className="compact-airline-header">
+                            <span className="compact-airline-name">{flight.airline}</span>
+                            <span className="compact-flight-no">{flight.flightNo}</span>
+                          </div>
+                          {flight.status ? (
+                            <span className="compact-tag">{flight.status}</span>
+                          ) : (
+                            <span className="compact-route-tag">{origin || 'Origin'} → {destination || 'Dest'}</span>
+                          )}
+                        </div>
+
+                        {/* Center: Departure time, flight line & Arrival time */}
+                        <div className="compact-times-col">
+                          <div className="compact-time-range">
+                            <span className="compact-time">{flight.departureTime}</span>
+                            <div className="compact-flight-bar">
+                              <span className="compact-duration">{flight.duration}</span>
+                              <div className="compact-line">
+                                <span className="compact-line-dot" />
+                                <Plane size={11} className="compact-line-plane" />
+                                <span className="compact-line-dot" />
+                              </div>
+                              <span className="compact-stops">{flight.stops}</span>
+                            </div>
+                            <span className="compact-time">{flight.arrivalTime}</span>
+                          </div>
+                        </div>
+
+                        {/* Right: Fare & View Details Button */}
+                        <div className="compact-fare-col">
+                          <div className="compact-price">
+                            <span className="compact-curr">₹</span>
+                            <span className="compact-amount">{(flight.price || 0).toLocaleString('en-IN')}</span>
+                          </div>
+                          {(() => {
+                            const portals = getFlightBookingPortals(flight, false);
+                            return (
+                              <a
+                                href={portals.mmt}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="compact-details-btn book-btn"
+                                onClick={(e) => e.stopPropagation()}
+                                title={`Book on MakeMyTrip (${portals.route} · ${portals.dateFormatted})`}
+                              >
+                                <span>Book</span>
+                                <ExternalLink size={11} />
+                              </a>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1468,7 +1622,7 @@ export default function App() {
                 </div>
 
                 <div className="stays-horizontal-list">
-                  {deckData.attractions?.map((att, idx) => (
+                  {deckData.attractions?.slice(0, 7).map((att, idx) => (
                     <article key={idx} className="stay-card-horizontal attraction-card-horizontal">
                       <div className="stay-info-col">
                         <h4 className="stay-property-name">{att.name}</h4>

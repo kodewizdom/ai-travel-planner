@@ -999,6 +999,34 @@ body {
   gap: 0.5rem;
 }
 
+.flight-leg-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.flight-leg-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0.35rem 0.2rem 0.45rem;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 0.2rem;
+}
+
+.flight-leg-header h4 {
+  font-size: 0.96rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0;
+}
+
+.flight-leg-sub {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #1769e8;
+}
+
 /* 1. COMPACT FLIGHT CARD (Half size, structured horizontally) */
 .flight-card-compact {
   background: var(--bg-card);
