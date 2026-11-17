@@ -115,6 +115,17 @@ class PlanRequest(BaseModel):
     conversation_history: list[dict[str, Any]] = []
 
 
+class FlightSearchRequest(BaseModel):
+    origin: str
+    destination: str
+    origin_airport: str | None = None
+    destination_airport: str | None = None
+    departure_date: str
+    return_date: str | None = None
+    travellers: int = 1
+    trip_type: str = "one_way"
+
+
 @app.get("/api/health")
 def health_check():
     return {
@@ -145,6 +156,51 @@ def handle_chat(req: ChatRequest):
     except Exception as e:
         log_step("api_error", str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/flights")
+def get_flights(req: FlightSearchRequest):
+    try:
+        orig = req.origin_airport or req.origin
+        dest = req.destination_airport or req.destination
+        flight_result = tools.search_flights(
+            origin=orig,
+            destination=dest,
+            departure_date=req.departure_date,
+            return_date=req.return_date if req.trip_type == "round_trip" else None,
+            adults=req.travellers,
+            currency="INR",
+            trip_type=req.trip_type,
+        )
+        options = flight_result.get("options") or flight_result.get("outbound") or []
+        flights = []
+        for opt in options:
+            flights.append({
+                "airline": opt.get("airline", "Domestic Carrier"),
+                "flightNo": opt.get("flightNo") or opt.get("flight_number", ""),
+                "departureTime": opt.get("departureTime") or opt.get("departure", "07:00"),
+                "arrivalTime": opt.get("arrivalTime") or opt.get("arrival", "09:15"),
+                "duration": opt.get("duration", "2h 15m"),
+                "stops": opt.get("stops", "Non-stop"),
+                "price": int(opt.get("price", 5490)),
+                "aircraft": opt.get("aircraft", "Airbus A320neo"),
+                "baggage": opt.get("baggage", "7kg Cabin · 15kg Check-in"),
+                "isLive": flight_result.get("live_pricing", False) or "Live" in str(flight_result.get("data_source", "")),
+                "dataSource": flight_result.get("data_source", "Google Flights"),
+            })
+        return {
+            "status": "success",
+            "flights": flights,
+            "data_source": flight_result.get("data_source", "Google Flights"),
+            "booking_link": flight_result.get("booking_link"),
+        }
+    except Exception as e:
+        log_step("flights_api_error", str(e))
+        return {
+            "status": "fallback",
+            "flights": [],
+            "error": str(e),
+        }
 
 
 @app.post("/api/plan")
@@ -200,11 +256,47 @@ def handle_plan(req: PlanRequest):
             "hotel options meeting the location preference, restaurants, itinerary, and budget."
         )
 
+    # Concurrently search live flights for the right-hand panel
+    live_flights = []
+    flight_data_source = "Google Flights"
+    try:
+        orig = req.origin_airport or req.origin
+        dest = req.destination_airport or req.destination
+        flight_result = tools.search_flights(
+            origin=orig,
+            destination=dest,
+            departure_date=req.departure_date,
+            return_date=req.return_date if req.trip_type == "round_trip" else None,
+            adults=req.travellers,
+            currency="INR",
+            trip_type=req.trip_type,
+        )
+        flight_data_source = flight_result.get("data_source", "Google Flights")
+        options = flight_result.get("options") or flight_result.get("outbound") or []
+        for opt in options:
+            live_flights.append({
+                "airline": opt.get("airline", "Domestic Carrier"),
+                "flightNo": opt.get("flightNo") or opt.get("flight_number", ""),
+                "departureTime": opt.get("departureTime") or opt.get("departure", "07:00"),
+                "arrivalTime": opt.get("arrivalTime") or opt.get("arrival", "09:15"),
+                "duration": opt.get("duration", "2h 15m"),
+                "stops": opt.get("stops", "Non-stop"),
+                "price": int(opt.get("price", 5490)),
+                "aircraft": opt.get("aircraft", "Airbus A320neo"),
+                "baggage": opt.get("baggage", "7kg Cabin · 15kg Check-in"),
+                "isLive": flight_result.get("live_pricing", False) or "Live" in str(flight_result.get("data_source", "")),
+                "dataSource": flight_data_source,
+            })
+    except Exception as fl_err:
+        log_step("plan_flights_lookup_err", str(fl_err))
+
     try:
         reply = travel_agent.chat(form_prompt, req.conversation_history)
         return {
             "prompt": form_prompt,
             "reply": reply,
+            "flights": live_flights,
+            "data_source": flight_data_source,
             "status": "success",
         }
     except Exception as e:

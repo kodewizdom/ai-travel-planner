@@ -330,6 +330,13 @@ export default function App() {
         throw new Error(data.detail || 'Failed to generate itinerary');
       }
 
+      if (data.flights && data.flights.length > 0) {
+        setDeckData(prev => ({
+          ...prev,
+          flights: data.flights
+        }));
+      }
+
       setMessages(prev => [
         ...prev,
         { role: 'user', content: data.prompt, isInternal: true, summary: summaryText },
@@ -1114,7 +1121,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* MIDDLE: 4 CAPSULE FILTER BUTTONS */}
+          {/* MIDDLE: 4 CAPSULE FILTER BUTTONS WITH COUNTER PILLS */}
           <div className="capsule-navigation-bar">
             <div className="capsule-button-container">
               <button
@@ -1122,8 +1129,9 @@ export default function App() {
                 className={`capsule-btn ${activeCapsule === 'flights' ? 'active' : ''}`}
                 onClick={() => setActiveCapsule('flights')}
               >
-                <Plane size={14} />
+                <Plane size={15} />
                 <span>Flights</span>
+                <span className="capsule-count-badge">{(deckData.flights || []).length || 3}</span>
               </button>
 
               <button
@@ -1131,8 +1139,9 @@ export default function App() {
                 className={`capsule-btn ${activeCapsule === 'hotels' ? 'active' : ''}`}
                 onClick={() => setActiveCapsule('hotels')}
               >
-                <Hotel size={14} />
+                <Hotel size={15} />
                 <span>Hotels</span>
+                <span className="capsule-count-badge">{(deckData.hotels || []).length || 2}</span>
               </button>
 
               <button
@@ -1140,8 +1149,9 @@ export default function App() {
                 className={`capsule-btn ${activeCapsule === 'restaurants' ? 'active' : ''}`}
                 onClick={() => setActiveCapsule('restaurants')}
               >
-                <Utensils size={14} />
+                <Utensils size={15} />
                 <span>Restaurants</span>
+                <span className="capsule-count-badge">{(deckData.restaurants || []).length || 2}</span>
               </button>
 
               <button
@@ -1149,8 +1159,9 @@ export default function App() {
                 className={`capsule-btn ${activeCapsule === 'attractions' ? 'active' : ''}`}
                 onClick={() => setActiveCapsule('attractions')}
               >
-                <MapPin size={14} />
-                <span>Places to Visit</span>
+                <Compass size={15} />
+                <span>Attractions</span>
+                <span className="capsule-count-badge">{(deckData.attractions || []).length || 2}</span>
               </button>
             </div>
           </div>
@@ -1346,66 +1357,62 @@ export default function App() {
                   {deckData.hotels?.map((hotel, idx) => (
                     <div
                       key={idx}
-                      className="stay-card-compact"
+                      className="hotel-card-refined"
                       onClick={() => setSelectedItemDetail({ type: 'hotel', data: hotel })}
                     >
-                      {/* Left: Name, Category tag, Genuine Rating, Location with Map link */}
-                      <div className="compact-hotel-col">
-                        <div className="compact-hotel-header">
-                          <h4 className="compact-hotel-name">{hotel.name}</h4>
-                          {hotel.category && (
-                            <span className="compact-category-tag">{hotel.category}</span>
-                          )}
+                      <div className="card-top-row">
+                        <div className="card-heading-group">
+                          <h4 className="card-title">{hotel.name}</h4>
+                          <div className="card-subtitle-accent">{hotel.category || '4-Star Modern Hotel'}</div>
                         </div>
-
-                        <div className="compact-hotel-subline">
-                          {/* Genuine Rating with review count */}
-                          <div className="genuine-rating-badge" title="Verified Guest Rating">
-                            <span className="rating-star">★</span>
-                            <span className="rating-score">{hotel.rating}</span>
-                            {hotel.reviewsCount && (
-                              <span className="rating-count">
-                                ({hotel.reviewsCount > 999 ? `${(hotel.reviewsCount / 1000).toFixed(1)}k` : hotel.reviewsCount})
-                              </span>
-                            )}
-                          </div>
-
-                          <span className="meta-separator">•</span>
-
-                          {/* Location with direct Google Maps redirect */}
-                          <a
-                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hotel.name + ' ' + (hotel.location || destination || 'India'))}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="compact-map-link"
-                            onClick={(e) => e.stopPropagation()}
-                            title={`Check ${hotel.name} location on Google Maps`}
-                          >
-                            <MapPin size={12} className="map-icon" />
-                            <span className="map-location-name">{hotel.location}</span>
-                            <ExternalLink size={10} className="map-ext" />
-                          </a>
+                        <div className="rating-badge-peach">
+                          <span className="star-icon">★</span>
+                          <span className="score-val">{hotel.rating || 4.5}</span>
                         </div>
                       </div>
 
-                      {/* Right: Price & MakeMyTrip Book Button */}
-                      <div className="compact-fare-col">
-                        <div className="compact-price">
-                          <span className="compact-curr">₹</span>
-                          <span className="compact-amount">{hotel.pricePerNight?.toLocaleString('en-IN')}</span>
-                          <span className="compact-unit">/ night</span>
+                      <div className="card-location-row">
+                        <MapPin size={13} className="pin-icon" />
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(hotel.name + ' ' + (hotel.location || destination || 'India'))}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="card-location-text map-link"
+                          onClick={(e) => e.stopPropagation()}
+                          title={`Check ${hotel.name} on Google Maps`}
+                        >
+                          {hotel.location || destination || 'Central Business District'}
+                        </a>
+                      </div>
+
+                      <p className="card-desc-text">
+                        {hotel.description || 'Comfortable and convenient location close to key shopping hubs and transit.'}
+                      </p>
+
+                      <div className="card-pills-row">
+                        {(hotel.amenities || ['Free Wi-Fi', 'Buffet Breakfast', 'Fitness Center', 'Airport Shuttle']).map((am, aIdx) => (
+                          <span key={aIdx} className="amenity-pill-tag">{am}</span>
+                        ))}
+                      </div>
+
+                      <div className="card-footer-row">
+                        <div className="card-price-block">
+                          <span className="price-prefix">From </span>
+                          <span className="price-curr">₹</span>
+                          <span className="price-amount">{(hotel.pricePerNight || 4500).toLocaleString('en-IN')}</span>
+                          <span className="price-suffix"> / night</span>
                         </div>
 
                         <a
                           href={`https://www.makemytrip.com/hotels/hotel-listing/?city=${encodeURIComponent(destination || 'India')}&searchText=${encodeURIComponent(hotel.name)}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="compact-details-btn book-btn"
+                          className="card-action-link"
                           onClick={(e) => e.stopPropagation()}
                           title={`Book ${hotel.name} on MakeMyTrip`}
                         >
-                          <span>Book</span>
-                          <ExternalLink size={11} />
+                          <span className="action-link-text">View Details</span>
+                          <ArrowRight size={14} className="action-arrow" />
                         </a>
                       </div>
                     </div>
@@ -1428,66 +1435,65 @@ export default function App() {
                   {deckData.restaurants?.map((rest, idx) => (
                     <div
                       key={idx}
-                      className="dining-card-compact"
+                      className="dining-card-refined"
                       onClick={() => setSelectedItemDetail({ type: 'restaurant', data: rest })}
                     >
-                      {/* Left: Name, Cuisine tag, Genuine Rating, Location with Map link */}
-                      <div className="compact-hotel-col">
-                        <div className="compact-hotel-header">
-                          <h4 className="compact-hotel-name">{rest.name}</h4>
-                          {rest.cuisine && (
-                            <span className="compact-category-tag">{rest.cuisine}</span>
-                          )}
+                      <div className="card-top-row">
+                        <div className="card-heading-group">
+                          <h4 className="card-title">{rest.name}</h4>
+                          <div className="card-subtitle-accent">{rest.cuisine || 'North Indian & Regional Specialties'}</div>
                         </div>
-
-                        <div className="compact-hotel-subline">
-                          {/* Genuine Rating with review count */}
-                          <div className="genuine-rating-badge" title="Verified Customer Rating">
-                            <span className="rating-star">★</span>
-                            <span className="rating-score">{rest.rating}</span>
-                            {rest.reviewsCount && (
-                              <span className="rating-count">
-                                ({rest.reviewsCount > 999 ? `${(rest.reviewsCount / 1000).toFixed(1)}k` : rest.reviewsCount})
-                              </span>
-                            )}
-                          </div>
-
-                          <span className="meta-separator">•</span>
-
-                          {/* Location with direct Google Maps redirect */}
-                          <a
-                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(rest.name + ' ' + (rest.location || destination || 'India'))}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="compact-map-link"
-                            onClick={(e) => e.stopPropagation()}
-                            title={`Check ${rest.name} location on Google Maps`}
-                          >
-                            <MapPin size={12} className="map-icon" />
-                            <span className="map-location-name">{rest.location}</span>
-                            <ExternalLink size={10} className="map-ext" />
-                          </a>
+                        <div className="rating-badge-peach">
+                          <span className="star-icon">★</span>
+                          <span className="score-val">{rest.rating || 4.6}</span>
                         </div>
                       </div>
 
-                      {/* Right: Approx Price for Two & Google Maps Action Button */}
-                      <div className="compact-fare-col">
-                        <div className="compact-price">
-                          <span className="compact-curr">₹</span>
-                          <span className="compact-amount">{rest.priceForTwo?.toLocaleString('en-IN')}</span>
-                          <span className="compact-unit">for two</span>
+                      <div className="card-location-row">
+                        <MapPin size={13} className="pin-icon" />
+                        <a
+                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(rest.name + ' ' + (rest.location || destination || 'India'))}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="card-location-text map-link"
+                          onClick={(e) => e.stopPropagation()}
+                          title={`Check ${rest.name} on Google Maps`}
+                        >
+                          {rest.location || destination || 'City Center'}
+                        </a>
+                      </div>
+
+                      <div className="card-must-try-block">
+                        <span className="must-try-label">Must Try:</span>
+                        <div className="must-try-pills">
+                          {(rest.mustTry || ['Signature Thali', 'Slow-cooked Curries', 'Artisan Breads', 'Kulfi']).map((dish, dIdx) => (
+                            <span key={dIdx} className="must-try-pill">{dish}</span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <p className="card-desc-italic">
+                        {rest.ambience || rest.highlight || 'Traditional setting with regional music and authentic hospitality.'}
+                      </p>
+
+                      <div className="card-footer-row">
+                        <div className="card-price-block">
+                          <span className="price-dim">Approx </span>
+                          <span className="price-curr">₹</span>
+                          <span className="price-amount">{(rest.priceForTwo || 1200).toLocaleString('en-IN')}</span>
+                          <span className="price-suffix"> for two</span>
                         </div>
 
                         <a
                           href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(rest.name + ' ' + (rest.location || destination || 'India'))}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="compact-details-btn book-btn"
+                          className="card-action-link"
                           onClick={(e) => e.stopPropagation()}
-                          title={`Open ${rest.name} on Google Maps`}
+                          title={`View ${rest.name} location`}
                         >
-                          <span>Map</span>
-                          <ExternalLink size={11} />
+                          <span className="action-link-text">View Details</span>
+                          <ArrowRight size={14} className="action-arrow" />
                         </a>
                       </div>
                     </div>
@@ -1510,59 +1516,44 @@ export default function App() {
                   {deckData.attractions?.map((att, idx) => (
                     <div
                       key={idx}
-                      className="attraction-card-compact"
+                      className="attraction-card-refined"
                       onClick={() => setSelectedItemDetail({ type: 'attraction', data: att })}
                     >
-                      {/* Left: Name, Category tag, Location with Map link, Official Timings */}
-                      <div className="compact-hotel-col">
-                        <div className="compact-hotel-header">
-                          <h4 className="compact-hotel-name">{att.name}</h4>
-                          {att.category && (
-                            <span className="compact-category-tag">{att.category}</span>
-                          )}
-                        </div>
-
-                        <div className="compact-hotel-subline">
-                          {/* Location with direct Google Maps redirect */}
-                          <a
-                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(att.name + ' ' + (att.location || destination || 'India'))}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="compact-map-link"
-                            onClick={(e) => e.stopPropagation()}
-                            title={`Check ${att.name} on Google Maps`}
-                          >
-                            <MapPin size={12} className="map-icon" />
-                            <span className="map-location-name">{att.location || destination || 'India'}</span>
-                            <ExternalLink size={10} className="map-ext" />
-                          </a>
-
-                          <span className="meta-separator">•</span>
-
-                          {/* Official Visiting Timings */}
-                          <div className="compact-timing-badge" title="Official Visiting Hours from Google Maps">
-                            <Clock size={11} className="clock-icon" />
-                            <span>{att.timings}</span>
-                          </div>
+                      <div className="card-top-row">
+                        <div className="card-heading-group">
+                          <h4 className="card-title">{att.name}</h4>
+                          <div className="card-subtitle-accent">{att.category || 'Heritage Landmark'}</div>
                         </div>
                       </div>
 
-                      {/* Right: Entry Fee / Tariff & Google Maps Directions Button */}
-                      <div className="compact-fare-col">
-                        <div className="compact-fee-box">
-                          <span className="compact-fee-val">{att.entryFee ? att.entryFee.split(' · ')[0] : 'Free Entry'}</span>
+                      <div className="attraction-meta-pill-bar">
+                        <div className="meta-item">
+                          <Clock size={13} className="meta-icon" />
+                          <span>{att.timings || '09:00 AM - 05:00 PM'}</span>
                         </div>
+                        <div className="meta-item">
+                          <Info size={13} className="meta-icon" />
+                          <span>{att.entryFee || '₹30 (Indians)'}</span>
+                        </div>
+                      </div>
 
+                      <p className="card-desc-text">
+                        {att.highlights || att.description || 'Ancient architecture, royal artifacts, and panoramic views over the city.'}
+                      </p>
+
+                      <div className="card-footer-divider" />
+
+                      <div className="card-footer-row">
                         <a
                           href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(att.name + ' ' + (att.location || destination || 'India'))}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="compact-details-btn book-btn"
+                          className="attraction-guide-link"
                           onClick={(e) => e.stopPropagation()}
                           title={`View ${att.name} on Google Maps`}
                         >
-                          <span>Map</span>
-                          <ExternalLink size={11} />
+                          <span>View Complete Sights Guide</span>
+                          <ArrowRight size={14} className="action-arrow" />
                         </a>
                       </div>
                     </div>

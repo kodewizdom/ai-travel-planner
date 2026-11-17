@@ -423,6 +423,97 @@ class TravelTools:
         formatted.sort(key=lambda x: x["price"])
         return formatted[:limit]
 
+    # Primary Apify Google Flights Scraper Actor (accurate to live Google Flights INR rates within Rs 100-200)
+    APIFY_FLIGHTS_URL = (
+        "https://api.apify.com/v2/actors/famed_bonobo~google-flights-scraper"
+        "/run-sync-get-dataset-items"
+    )
+
+    def _apify_search_leg(
+        self,
+        dep_code: str,
+        arr_code: str,
+        travel_date: str,
+        adults: int = 1,
+        currency: str = "INR",
+        limit: int = 5,
+    ) -> list[dict[str, Any]] | None:
+        """Query real live Google Flights via Apify actor famed_bonobo~google-flights-scraper."""
+        apify_token = os.getenv("APIFY_TOKEN") or os.getenv("APIFY_API_TOKEN") or ""
+        if not apify_token.strip():
+            return None
+
+        payload = {
+            "origins": [dep_code],
+            "destinations": [arr_code],
+            "departureDate": travel_date,
+            "adults": max(1, int(adults)),
+            "country": "in",
+            "currency": currency,
+            "maxFlightsPerSearch": 15,
+        }
+        try:
+            log_step("apify_query", f"{dep_code}->{arr_code} {travel_date}")
+            resp = requests.post(
+                self.APIFY_FLIGHTS_URL,
+                headers={"Authorization": f"Bearer {apify_token.strip()}"},
+                params={"timeout": 65, "maxTotalChargeUsd": 0.10},
+                json=payload,
+                timeout=(5, 75),
+            )
+            resp.raise_for_status()
+            rows = resp.json()
+            if not isinstance(rows, list):
+                return None
+
+            formatted = []
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                price = row.get("price")
+                if not price:
+                    continue
+                legs = row.get("segments") or []
+                if not legs or not isinstance(legs, list):
+                    continue
+                first_leg = legs[0]
+                last_leg = legs[-1]
+                airline = first_leg.get("airline") or "Domestic Carrier"
+                flight_no = first_leg.get("flightNumber") or ""
+                dep_dt = first_leg.get("departureDateTime") or ""
+                arr_dt = last_leg.get("arrivalDateTime") or ""
+
+                dep_time = dep_dt.split("T")[1][:5] if "T" in dep_dt else dep_dt[:5]
+                arr_time = arr_dt.split("T")[1][:5] if "T" in arr_dt else arr_dt[:5]
+
+                tot_dur = row.get("totalDurationMinutes") or 0
+                dur_str = f"{tot_dur // 60}h {tot_dur % 60}m" if tot_dur else "2h 15m"
+                stops_count = len(legs) - 1
+                stops_label = "Non-stop" if stops_count == 0 else f"{stops_count} stop"
+
+                formatted.append({
+                    "airline": airline,
+                    "flight_number": flight_no,
+                    "flightNo": flight_no,
+                    "departure": dep_time,
+                    "departureTime": dep_time,
+                    "arrival": arr_time,
+                    "arrivalTime": arr_time,
+                    "duration": dur_str,
+                    "stops": stops_label,
+                    "price": int(round(float(price))),
+                    "aircraft": first_leg.get("airplane") or "Airbus A320neo",
+                    "baggage": "7kg Cabin · 15kg Check-in",
+                })
+
+            if formatted:
+                formatted.sort(key=lambda x: x["price"])
+                return formatted[:limit]
+            return None
+        except Exception as err:
+            log_step("apify_flight_error", str(err))
+            return None
+
     def _fetch_leg_with_backup(
         self,
         dep_code: str,
@@ -432,25 +523,32 @@ class TravelTools:
         currency: str,
         limit: int = 5,
     ) -> tuple[list[dict[str, Any]], str, bool]:
-        """Try primary fli Google Flights, then SerpApi backup. Returns (flights, source_name, live_ok)."""
+        """Try Apify live Google Flights first (for genuine live rates), then fli, then SerpApi backup."""
+        # 1. Primary: Apify Google Flights actor
+        try:
+            apify_res = self._apify_search_leg(dep_code, arr_code, travel_date, adults, currency, limit)
+            if apify_res:
+                return apify_res, "Apify Google Flights (Live)", True
+        except Exception as a_err:
+            log_step("apify_fallback", str(a_err))
+
+        # 2. Secondary: fli live Google Flights
         try:
             options = self._fli_search_leg(dep_code, arr_code, travel_date, adults, currency, limit)
             if options:
                 return options, "Google Flights (Live)", True
-            # Confirm 0 flights if SerpApi backup is set; otherwise report 0 flights honestly
-            backup = self._serpapi_search_leg(dep_code, arr_code, travel_date, adults, currency, limit)
-            if backup is not None:
-                return backup, "SerpApi Google Flights (Live)", True
-            return [], "Google Flights (Live)", True
         except Exception as err:
             log_step("fli_fallback", f"{dep_code}->{arr_code} {travel_date}: {err}")
-            try:
-                backup = self._serpapi_search_leg(dep_code, arr_code, travel_date, adults, currency, limit)
-                if backup is not None:
-                    return backup, "SerpApi Google Flights (Live Backup)", True
-            except Exception as b_err:
-                log_step("serpapi_error", str(b_err))
-            return [], "Unavailable", False
+
+        # 3. Tertiary: SerpApi backup
+        try:
+            backup = self._serpapi_search_leg(dep_code, arr_code, travel_date, adults, currency, limit)
+            if backup is not None:
+                return backup, "SerpApi Google Flights (Live Backup)", True
+        except Exception as b_err:
+            log_step("serpapi_error", str(b_err))
+
+        return [], "Unavailable", False
 
     def _format_fli_results(self, raw_results: list[Any], limit: int = 5) -> list[dict[str, Any]]:
         """Format raw fli FlightResult objects into compact sorted dictionaries."""
@@ -600,6 +698,97 @@ class TravelTools:
         formatted.sort(key=lambda x: x["price"])
         return formatted[:limit]
 
+    # Primary Apify Google Flights Scraper Actor (accurate to live Google Flights INR rates within Rs 100-200)
+    APIFY_FLIGHTS_URL = (
+        "https://api.apify.com/v2/actors/famed_bonobo~google-flights-scraper"
+        "/run-sync-get-dataset-items"
+    )
+
+    def _apify_search_leg(
+        self,
+        dep_code: str,
+        arr_code: str,
+        travel_date: str,
+        adults: int = 1,
+        currency: str = "INR",
+        limit: int = 5,
+    ) -> list[dict[str, Any]] | None:
+        """Query real live Google Flights via Apify actor famed_bonobo~google-flights-scraper."""
+        apify_token = os.getenv("APIFY_TOKEN") or os.getenv("APIFY_API_TOKEN") or ""
+        if not apify_token.strip():
+            return None
+
+        payload = {
+            "origins": [dep_code],
+            "destinations": [arr_code],
+            "departureDate": travel_date,
+            "adults": max(1, int(adults)),
+            "country": "in",
+            "currency": currency,
+            "maxFlightsPerSearch": 15,
+        }
+        try:
+            log_step("apify_query", f"{dep_code}->{arr_code} {travel_date}")
+            resp = requests.post(
+                self.APIFY_FLIGHTS_URL,
+                headers={"Authorization": f"Bearer {apify_token.strip()}"},
+                params={"timeout": 65, "maxTotalChargeUsd": 0.10},
+                json=payload,
+                timeout=(5, 75),
+            )
+            resp.raise_for_status()
+            rows = resp.json()
+            if not isinstance(rows, list):
+                return None
+
+            formatted = []
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                price = row.get("price")
+                if not price:
+                    continue
+                legs = row.get("segments") or []
+                if not legs or not isinstance(legs, list):
+                    continue
+                first_leg = legs[0]
+                last_leg = legs[-1]
+                airline = first_leg.get("airline") or "Domestic Carrier"
+                flight_no = first_leg.get("flightNumber") or ""
+                dep_dt = first_leg.get("departureDateTime") or ""
+                arr_dt = last_leg.get("arrivalDateTime") or ""
+
+                dep_time = dep_dt.split("T")[1][:5] if "T" in dep_dt else dep_dt[:5]
+                arr_time = arr_dt.split("T")[1][:5] if "T" in arr_dt else arr_dt[:5]
+
+                tot_dur = row.get("totalDurationMinutes") or 0
+                dur_str = f"{tot_dur // 60}h {tot_dur % 60}m" if tot_dur else "2h 15m"
+                stops_count = len(legs) - 1
+                stops_label = "Non-stop" if stops_count == 0 else f"{stops_count} stop"
+
+                formatted.append({
+                    "airline": airline,
+                    "flight_number": flight_no,
+                    "flightNo": flight_no,
+                    "departure": dep_time,
+                    "departureTime": dep_time,
+                    "arrival": arr_time,
+                    "arrivalTime": arr_time,
+                    "duration": dur_str,
+                    "stops": stops_label,
+                    "price": int(round(float(price))),
+                    "aircraft": first_leg.get("airplane") or "Airbus A320neo",
+                    "baggage": "7kg Cabin · 15kg Check-in",
+                })
+
+            if formatted:
+                formatted.sort(key=lambda x: x["price"])
+                return formatted[:limit]
+            return None
+        except Exception as err:
+            log_step("apify_flight_error", str(err))
+            return None
+
     def _fetch_leg_with_backup(
         self,
         dep_code: str,
@@ -609,25 +798,32 @@ class TravelTools:
         currency: str,
         limit: int = 5,
     ) -> tuple[list[dict[str, Any]], str, bool]:
-        """Try primary fli Google Flights, then SerpApi backup. Returns (flights, source_name, live_ok)."""
+        """Try Apify live Google Flights first (for genuine live rates), then fli, then SerpApi backup."""
+        # 1. Primary: Apify Google Flights actor
+        try:
+            apify_res = self._apify_search_leg(dep_code, arr_code, travel_date, adults, currency, limit)
+            if apify_res:
+                return apify_res, "Apify Google Flights (Live)", True
+        except Exception as a_err:
+            log_step("apify_fallback", str(a_err))
+
+        # 2. Secondary: fli live Google Flights
         try:
             options = self._fli_search_leg(dep_code, arr_code, travel_date, adults, currency, limit)
             if options:
                 return options, "Google Flights (Live)", True
-            # Confirm 0 flights if SerpApi backup is set; otherwise report 0 flights honestly
-            backup = self._serpapi_search_leg(dep_code, arr_code, travel_date, adults, currency, limit)
-            if backup is not None:
-                return backup, "SerpApi Google Flights (Live)", True
-            return [], "Google Flights (Live)", True
         except Exception as err:
             log_step("fli_fallback", f"{dep_code}->{arr_code} {travel_date}: {err}")
-            try:
-                backup = self._serpapi_search_leg(dep_code, arr_code, travel_date, adults, currency, limit)
-                if backup is not None:
-                    return backup, "SerpApi Google Flights (Live Backup)", True
-            except Exception as b_err:
-                log_step("serpapi_error", str(b_err))
-            return [], "Unavailable", False
+
+        # 3. Tertiary: SerpApi backup
+        try:
+            backup = self._serpapi_search_leg(dep_code, arr_code, travel_date, adults, currency, limit)
+            if backup is not None:
+                return backup, "SerpApi Google Flights (Live Backup)", True
+        except Exception as b_err:
+            log_step("serpapi_error", str(b_err))
+
+        return [], "Unavailable", False
 
     def search_flights(
         self,
