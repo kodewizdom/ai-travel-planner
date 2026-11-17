@@ -3027,6 +3027,35 @@ body {
   line-height: 1.4;
 }
 
+.attraction-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.ask-about-btn {
+  background: #1769e8 !important;
+  border: 1px solid #1458c8 !important;
+  color: #ffffff !important;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.44rem 0.92rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.ask-about-btn:hover:not(:disabled) {
+  background: #0f55c2 !important;
+  transform: translateY(-1px);
+}
+
+.ask-about-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 @media (max-width: 640px) {
   .restaurant-card-horizontal,
   .attraction-card-horizontal {
@@ -3039,5 +3068,7 @@ body {
   }
   .stay-card-actions {
     margin-left: auto;
+    width: 100%;
+    justify-content: flex-end;
   }
 }

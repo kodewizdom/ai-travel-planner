@@ -427,13 +427,22 @@ export default function App() {
         }));
       }
 
+      // Format clean Places to visit message matching reference Image 4!
+      const placesList = (data.attractions && data.attractions.length > 0)
+        ? data.attractions
+        : (deckData.attractions || []);
+
+      const placesReplyText = placesList && placesList.length > 0
+        ? ["Places to visit\n", ...placesList.slice(0, 4).map(p => `• ${p.name}\n`)].join("\n")
+        : "Places to visit\n\nNo places to visit were returned for this trip. You can ask me to search again.";
+
       setMessages(prev => [
         ...prev,
         { role: 'user', content: data.prompt, isInternal: true, summary: summaryText },
         {
           role: 'assistant',
-          content: data.reply,
-          isPlanResult: true,
+          content: placesReplyText,
+          isPlanResult: false,
           destName: destination
         }
       ]);
@@ -447,16 +456,18 @@ export default function App() {
     }
   };
 
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (!hasSearched) return;
-    const text = inputText.trim();
+  const handleSendMessage = async (e, customText = null) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const text = (customText !== null ? customText : inputText).trim();
     if (!text || isLoading) return;
 
-    setInputText('');
+    if (customText === null) {
+      setInputText('');
+    }
     const newMessages = [...messages, { role: 'user', content: text, isInternal: false }];
     setMessages(newMessages);
     setIsLoading(true);
+    if (isMobile) setMobileActiveTab('chat');
 
     try {
       const res = await fetch('/api/chat', {
@@ -485,48 +496,31 @@ export default function App() {
         }
       }
 
-      // 2. Extract new suggestions from assistant reply
-      const { category, items } = extractSuggestionsFromReply(data.reply, text, updatedDest || destination);
-
-      let suggestionBadge = null;
-      if (items.length > 0 && category) {
-        setDeckData(prev => {
-          const currentList = prev[category] || [];
-          const existingNames = new Set(currentList.map(item => item.name.toLowerCase()));
-          const newItems = items.filter(item => !existingNames.has(item.name.toLowerCase()));
-          if (newItems.length === 0) return prev;
-
-          return {
-            ...prev,
-            [category]: [...newItems, ...currentList]
-          };
-        });
-
-        setActiveCapsule(category);
-        const catLabel = category === 'attractions' ? 'Attractions' : category === 'hotels' ? 'Hotels' : 'Restaurants';
-        suggestionBadge = {
-          count: items.length,
-          category,
-          text: `Added ${items.length} new option${items.length > 1 ? 's' : ''} to ${catLabel} on the right`
-        };
-      }
-
-      setMessages([
-        ...newMessages,
+      setMessages(prev => [
+        ...prev,
         {
           role: 'assistant',
           content: data.reply,
-          suggestionBadge
+          isInternal: false
         }
       ]);
     } catch (err) {
-      setMessages([
-        ...newMessages,
-        { role: 'assistant', content: `Error: ${err.message}` }
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: `Sorry, I encountered an issue: ${err.message}`,
+          isInternal: false
+        }
       ]);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleAskAboutPlace = (place) => {
+    const question = `What should I know before visiting ${place.name}${destination ? ` in ${destination}` : ''}?`;
+    handleSendMessage(null, question);
   };
 
   const handleResetAll = () => {
@@ -1023,91 +1017,6 @@ export default function App() {
                 );
               }
 
-              // Clean confirmation card for plan results (no complicated text dump in chat!)
-              if (msg.isPlanResult) {
-                return (
-                  <div key={index} className="message-row assistant">
-                    <div className="avatar-bot">
-                      <Bot size={16} />
-                    </div>
-                    <div className="plan-ready-card">
-                      <div className="ready-card-badge">
-                        <Sparkles size={13} className="ready-sparkle" />
-                        <span>Options Ready</span>
-                      </div>
-
-                      <h4 className="ready-title">
-                        Ready! Your travel options for {msg.destName || destination} are loaded.
-                      </h4>
-
-                      <p className="ready-desc">
-                        I've loaded all flight schedules, verified stays, dining spots, and top attractions into the 4 explorer sections on the right.
-                      </p>
-
-                      <div className="ready-pills-row">
-                        <button
-                          type="button"
-                          className={`ready-tab-pill ${activeCapsule === 'flights' ? 'active' : ''}`}
-                          onClick={() => {
-                            setActiveCapsule('flights');
-                            if (isMobile) setMobileActiveTab('explorer');
-                          }}
-                        >
-                          <Plane size={13} />
-                          <span>Flights ({deckData.flights?.length || 0})</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`ready-tab-pill ${activeCapsule === 'hotels' ? 'active' : ''}`}
-                          onClick={() => {
-                            setActiveCapsule('hotels');
-                            if (isMobile) setMobileActiveTab('explorer');
-                          }}
-                        >
-                          <Hotel size={13} />
-                          <span>Hotels ({deckData.hotels?.length || 0})</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`ready-tab-pill ${activeCapsule === 'restaurants' ? 'active' : ''}`}
-                          onClick={() => {
-                            setActiveCapsule('restaurants');
-                            if (isMobile) setMobileActiveTab('explorer');
-                          }}
-                        >
-                          <Utensils size={13} />
-                          <span>Dining ({deckData.restaurants?.length || 0})</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`ready-tab-pill ${activeCapsule === 'attractions' ? 'active' : ''}`}
-                          onClick={() => {
-                            setActiveCapsule('attractions');
-                            if (isMobile) setMobileActiveTab('explorer');
-                          }}
-                        >
-                          <Compass size={13} />
-                          <span>Attractions ({deckData.attractions?.length || 0})</span>
-                        </button>
-                      </div>
-
-                      <div className="ready-footer-text">
-                        Ask any question below if you want suggestions, custom stops, or adjustments.
-                      </div>
-
-                      <details className="ready-notes-details">
-                        <summary>View raw AI itinerary notes</summary>
-                        <div className="ready-notes-markdown markdown-body">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {msg.content}
-                          </ReactMarkdown>
-                        </div>
-                      </details>
-                    </div>
-                  </div>
-                );
-              }
-
               return (
                 <div key={index} className={`message-row ${msg.role}`}>
                   <div className={msg.role === 'user' ? 'avatar-user' : 'avatar-bot'}>
@@ -1119,46 +1028,20 @@ export default function App() {
                         {msg.content}
                       </ReactMarkdown>
                     </div>
-                    {msg.suggestionBadge && (
-                      <button
-                        type="button"
-                        className="suggestion-updated-pill"
-                        onClick={() => {
-                          setActiveCapsule(msg.suggestionBadge.category);
-                          if (isMobile) setMobileActiveTab('explorer');
-                        }}
-                      >
-                        <Sparkles size={12} />
-                        <span>{msg.suggestionBadge.text}</span>
-                        <ArrowRight size={11} />
-                      </button>
-                    )}
                   </div>
                 </div>
               );
             })}
 
-            {/* LOADING CARD */}
+            {/* SIMPLE LOADING IN CHAT */}
             {isLoading && (
               <div className="message-row assistant">
                 <div className="avatar-bot">
                   <Bot size={16} />
                 </div>
-                <div className="loading-stage-box">
-                  <div className="loading-top-info">
-                    <span className="step-num">Step 0{loadingStepIndex + 1}</span>
-                    <span className="step-name">{LOADING_STEPS[loadingStepIndex]}</span>
-                  </div>
-                  <div className="loading-track">
-                    <div
-                      className="loading-fill"
-                      style={{
-                        width: `${((loadingStepIndex + 1) / LOADING_STEPS.length) * 100}%`
-                      }}
-                    />
-                  </div>
-                  <div className="loading-caption">
-                    Querying live Google Flights & regional databases...
+                <div className="message-bubble-wrapper">
+                  <div className="message-bubble loading">
+                    <span>Thinking…</span>
                   </div>
                 </div>
               </div>
@@ -1211,7 +1094,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* MIDDLE: 4 CAPSULE FILTER BUTTONS WITH COUNTER PILLS */}
+          {/* MIDDLE: 4 CAPSULE FILTER BUTTONS */}
           <div className="capsule-navigation-bar">
             <div className="capsule-button-container">
               <button
@@ -1221,9 +1104,6 @@ export default function App() {
               >
                 <Plane size={15} />
                 <span>Flights</span>
-                {deckData.flights?.length > 0 && (
-                  <span className="capsule-count-badge">{deckData.flights.length}</span>
-                )}
               </button>
 
               <button
@@ -1233,9 +1113,6 @@ export default function App() {
               >
                 <Hotel size={15} />
                 <span>Hotels</span>
-                {deckData.hotels?.length > 0 && (
-                  <span className="capsule-count-badge">{deckData.hotels.length}</span>
-                )}
               </button>
 
               <button
@@ -1245,9 +1122,6 @@ export default function App() {
               >
                 <Utensils size={15} />
                 <span>Restaurants</span>
-                {deckData.restaurants?.length > 0 && (
-                  <span className="capsule-count-badge">{deckData.restaurants.length}</span>
-                )}
               </button>
 
               <button
@@ -1255,17 +1129,28 @@ export default function App() {
                 className={`capsule-btn ${activeCapsule === 'attractions' ? 'active' : ''}`}
                 onClick={() => setActiveCapsule('attractions')}
               >
-                <Compass size={15} />
+                <MapPin size={15} />
                 <span>Places to Visit</span>
-                {deckData.attractions?.length > 0 && (
-                  <span className="capsule-count-badge">{deckData.attractions.length}</span>
-                )}
               </button>
             </div>
           </div>
 
-          {/* BOTTOM DECK: When not searched, show the clean initial state card! */}
-          {!hasSearched ? (
+          {/* BOTTOM DECK: When loading, show clean Checking travel options state! */}
+          {isLoading ? (
+            <div className="capsule-content-deck">
+              <div className="initial-state-deck-card">
+                <div className="initial-deck-header">
+                  <h3>
+                    {activeCapsule === 'flights' && 'Flights'}
+                    {activeCapsule === 'hotels' && 'Hotels'}
+                    {activeCapsule === 'restaurants' && 'Restaurants'}
+                    {activeCapsule === 'attractions' && 'Places to Visit'}
+                  </h3>
+                </div>
+                <p className="empty-state" role="status">Checking travel options…</p>
+              </div>
+            </div>
+          ) : !hasSearched ? (
             <div className="capsule-content-deck">
               <div className="initial-state-deck-card">
                 <div className="initial-deck-header">
@@ -1586,10 +1471,9 @@ export default function App() {
                       <div className="stay-info-col">
                         <h4 className="stay-property-name">{att.name}</h4>
                         <p className="stay-card-address">{att.address || `${att.name}, ${destination || 'City Center'}, India`}</p>
-                        {att.highlight && <p className="attraction-highlight-text">{att.highlight}</p>}
                       </div>
 
-                      <div className="stay-card-actions">
+                      <div className="stay-card-actions attraction-actions">
                         <a
                           href={att.maps_link || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(att.name + ' ' + (att.address || destination || 'India'))}`}
                           target="_blank"
@@ -1600,13 +1484,23 @@ export default function App() {
                           <span>Open Maps</span>
                           <span className="btn-arrow">↗</span>
                         </a>
+
+                        <button
+                          type="button"
+                          className="stay-action-btn primary ask-about-btn"
+                          disabled={isLoading}
+                          onClick={() => handleAskAboutPlace(att)}
+                          title={`Ask the travel assistant about ${att.name}`}
+                        >
+                          <span>Ask about this place</span>
+                        </button>
                       </div>
                     </article>
                   ))}
                 </div>
 
                 <div className="provider-disclaimer">
-                  Verify opening hours and ticket policies with the provider before visiting.
+                  Verify prices and availability with the provider before booking.
                 </div>
               </div>
             )}

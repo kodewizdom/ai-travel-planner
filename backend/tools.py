@@ -1360,6 +1360,30 @@ class TravelTools:
         CURATED_CITY_ATTRACTIONS: dict[str, list[dict[str, Any]]] = {
             "amritsar": [
                 {
+                    "name": "Summer Palace of Maharaja Ranjit Singh",
+                    "category": "Historic Summer Palace & Museum",
+                    "address": "Summer Palace of Maharaja Ranjit Singh, M.M.M. Road, Joshi Nagar, Amritsar - 143001, Punjab, India",
+                    "highlight": "Historic summer palace of Maharaja Ranjit Singh with Mughal gardens, rare artifacts, and royal weaponry.",
+                },
+                {
+                    "name": "Maharaja Ranjit Singh Garden",
+                    "category": "Historic Botanical Garden",
+                    "address": "Maharaja Ranjit Singh Garden, Joshi Nagar, Amritsar - 143001, Punjab, India",
+                    "highlight": "Serene landscaped grounds surrounding the summer palace, featuring centuries-old trees and fountains.",
+                },
+                {
+                    "name": "Company Bagh",
+                    "category": "Urban Heritage Park",
+                    "address": "Company Bagh, Joshi Nagar, Amritsar - 143001, Punjab, India",
+                    "highlight": "Sprawling British-era garden park known for evening walks, club houses, and lush greenery.",
+                },
+                {
+                    "name": "Litchi Park",
+                    "category": "Recreational Nature Park",
+                    "address": "Litchi Park, Joshi Nagar, Amritsar - 143001, Punjab, India",
+                    "highlight": "Peaceful park shaded by mature litchi fruit groves in central Amritsar.",
+                },
+                {
                     "name": "Golden Temple (Harmandir Sahib)",
                     "category": "Sacred Sikh Shrine & Spiritual Center",
                     "address": "Golden Temple Road, Atta Mandi, Katra Ahluwalia, Amritsar - 143006, Punjab, India",
@@ -1394,18 +1418,6 @@ class TravelTools:
                     "category": "Historic Hindu Temple",
                     "address": "Near Hathi Gate, Goal Bagh, Amritsar - 143001, Punjab, India",
                     "highlight": "16th-century temple architecturally resembling the Golden Temple, situated in the middle of a lake.",
-                },
-                {
-                    "name": "Ram Bagh & Maharaja Ranjit Singh Museum",
-                    "category": "Palace Garden & Museum",
-                    "address": "Mall Road, Ram Bagh, Amritsar - 143001, Punjab, India",
-                    "highlight": "Summer palace of the Lion of Punjab surrounded by formal Mughal-style gardens and armory.",
-                },
-                {
-                    "name": "Heritage Walk Street (Town Hall to Golden Temple)",
-                    "category": "Pedestrian Heritage Promenade",
-                    "address": "Heritage Street, Katra Ahluwalia, Amritsar - 143006, Punjab, India",
-                    "highlight": "Cobblestone boulevard showcasing Rajput and Mughal facade architecture, statues, and street food.",
                 },
             ]
         }
