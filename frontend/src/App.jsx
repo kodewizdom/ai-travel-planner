@@ -82,7 +82,9 @@ export default function App() {
   // Chat State
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isPlanningTrip, setIsPlanningTrip] = useState(false);
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const isLoading = isPlanningTrip || isChatLoading;
   const [loadingStepIndex, setLoadingStepIndex] = useState(0);
 
   // App Theme: defaults to light to match modern aesthetic
@@ -386,7 +388,7 @@ export default function App() {
       ? `${origLabel} → ${destLabel} · One Way (7-Day Fares from ${departureDate}) · ${travellers} traveller${travellers > 1 ? 's' : ''}${budgetText}`
       : `${origLabel} → ${destLabel} · ${tripLabel} · ${travellers} traveller${travellers > 1 ? 's' : ''} · ${hotelLabel} · ${datesText}${budgetText}`;
 
-    setIsLoading(true);
+    setIsPlanningTrip(true);
 
     try {
       const res = await fetch('/api/plan', {
@@ -452,7 +454,7 @@ export default function App() {
     } catch (err) {
       alert(`Error: ${err.message}`);
     } finally {
-      setIsLoading(false);
+      setIsPlanningTrip(false);
     }
   };
 
@@ -466,7 +468,7 @@ export default function App() {
     }
     const newMessages = [...messages, { role: 'user', content: text, isInternal: false }];
     setMessages(newMessages);
-    setIsLoading(true);
+    setIsChatLoading(true);
     if (isMobile) setMobileActiveTab('chat');
 
     try {
@@ -514,7 +516,7 @@ export default function App() {
         }
       ]);
     } finally {
-      setIsLoading(false);
+      setIsChatLoading(false);
     }
   };
 
@@ -1025,7 +1027,7 @@ export default function App() {
                   <div className="message-bubble-wrapper">
                     <div className="message-bubble markdown-body">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {msg.content}
+                        {(msg.content || '').replace(/<br\s*\/?>/gi, '\n\n')}
                       </ReactMarkdown>
                     </div>
                   </div>
@@ -1135,8 +1137,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* BOTTOM DECK: When loading, show clean Checking travel options state! */}
-          {isLoading ? (
+          {/* BOTTOM DECK: When planning trip, show clean Checking travel options state! */}
+          {isPlanningTrip ? (
             <div className="capsule-content-deck">
               <div className="initial-state-deck-card">
                 <div className="initial-deck-header">
