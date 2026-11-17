@@ -610,36 +610,14 @@ export default function App() {
                 if (isMobile) setMobileActiveTab('chat');
               }}
             >
-              <MessageSquare size={16} />
-              <span>Chat Planner</span>
-            </button>
-
-            <button
-              type="button"
-              className="sidebar-nav-item secondary"
-              onClick={() => {
-                if (isMobile) setMobileActiveTab('chat');
-              }}
-            >
-              <Folder size={16} />
-              <span>My Trips</span>
+              <Sparkles size={16} />
+              <span>AI Trip Planner</span>
             </button>
           </nav>
         </div>
 
-        {/* Bottom Section: Explore India Your Way + Monument Icon */}
+        {/* Bottom Section: Theme Toggle & Domestic India */}
         <div className="sidebar-bottom">
-          <div className="sidebar-campaign-badge">
-            <Landmark size={36} strokeWidth={1.4} className="campaign-monument-icon" />
-            <div className="campaign-text-group">
-              <span className="campaign-heading">Explore India</span>
-              <span className="campaign-subheading">Your Way</span>
-              <svg className="campaign-arc" viewBox="0 0 64 6" fill="none">
-                <path d="M2 4C20 1 44 1 62 4" stroke="#F59E0B" strokeWidth="2.5" strokeLinecap="round" />
-              </svg>
-            </div>
-          </div>
-
           <button
             type="button"
             className="sidebar-theme-toggle-btn"
