@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bot, Compass } from 'lucide-react';
+import { Bot, Compass, Sparkles } from 'lucide-react';
 
 import { DEFAULT_INDIA_BANNERS, getDestinationData, getCityHeroImage, fetchWikipediaImage } from './destinationData';
 import { formatDate, sortFlightList } from './utils/flightUtils';
