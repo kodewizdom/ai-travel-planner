@@ -1,8 +1,8 @@
 // Curated destination data, imagery, and attractions for Indian domestic destinations
 
 export const DESTINATION_IMAGES = {
-  "patna": "https://images.unsplash.com/photo-1622308644420-a661ea02e865?auto=format&fit=crop&w=1500&q=85",
-  "amritsar": "https://images.unsplash.com/photo-1588096344356-9b59e77ef791?auto=format&fit=crop&w=1500&q=85",
+  "patna": "https://images.unsplash.com/photo-1590050752117-238cb0fb12b1?auto=format&fit=crop&w=1500&q=85",
+  "amritsar": "https://images.unsplash.com/photo-1514222134-b57cbb8ce073?auto=format&fit=crop&w=1500&q=85",
   "varanasi": "https://images.unsplash.com/photo-1561361513-2d000a50f0dc?auto=format&fit=crop&w=1500&q=85",
   "delhi": "https://images.unsplash.com/photo-1587474260584-136574528ed5?auto=format&fit=crop&w=1500&q=85",
   "mumbai": "https://images.unsplash.com/photo-1570168007204-dfb528c6958f?auto=format&fit=crop&w=1500&q=85",
@@ -21,13 +21,13 @@ export const DESTINATION_IMAGES = {
   "shimla": "https://images.unsplash.com/photo-1597074866923-dc0589150358?auto=format&fit=crop&w=1500&q=85",
   "manali": "https://images.unsplash.com/photo-1626621341517-bbf3d9990a23?auto=format&fit=crop&w=1500&q=85",
   "rishikesh": "https://images.unsplash.com/photo-1584551246679-0daf3d275d0f?auto=format&fit=crop&w=1500&q=85",
-  "lucknow": "https://images.unsplash.com/photo-1610444583714-411652438b81?auto=format&fit=crop&w=1500&q=85",
-  "ahmedabad": "https://images.unsplash.com/photo-1609137144822-45e051c72097?auto=format&fit=crop&w=1500&q=85",
-  "pune": "https://images.unsplash.com/photo-1609137144822-45e051c72097?auto=format&fit=crop&w=1500&q=85",
+  "lucknow": "https://images.unsplash.com/photo-1587474260584-136574528ed5?auto=format&fit=crop&w=1500&q=85",
+  "ahmedabad": "https://images.unsplash.com/photo-1590050752117-238cb0fb12b1?auto=format&fit=crop&w=1500&q=85",
+  "pune": "https://images.unsplash.com/photo-1566552881560-0be862a7c445?auto=format&fit=crop&w=1500&q=85",
   "chandigarh": "https://images.unsplash.com/photo-1588416936097-41850ab3d86d?auto=format&fit=crop&w=1500&q=85",
-  "bhopal": "https://images.unsplash.com/photo-1622308644420-a661ea02e865?auto=format&fit=crop&w=1500&q=85",
-  "bhubaneswar": "https://images.unsplash.com/photo-1609137144822-45e051c72097?auto=format&fit=crop&w=1500&q=85",
-  "indore": "https://images.unsplash.com/photo-1609137144822-45e051c72097?auto=format&fit=crop&w=1500&q=85",
+  "bhopal": "https://images.unsplash.com/photo-1548013146-72479768bada?auto=format&fit=crop&w=1500&q=85",
+  "bhubaneswar": "https://images.unsplash.com/photo-1582510003544-4d00b7f74220?auto=format&fit=crop&w=1500&q=85",
+  "indore": "https://images.unsplash.com/photo-1570168007204-dfb528c6958f?auto=format&fit=crop&w=1500&q=85",
   "ooty": "https://images.unsplash.com/photo-1589182373726-e4f658ab50f0?auto=format&fit=crop&w=1500&q=85",
   "darjeeling": "https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=1500&q=85",
   "alleppey": "https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?auto=format&fit=crop&w=1500&q=85"
@@ -57,7 +57,7 @@ export async function fetchWikipediaImage(city) {
 export function getCityHeroImage(city) {
   if (!city) return null;
   const key = city.split(',')[0].replace(/\([^)]*\)/g, '').trim().toLowerCase();
-  return DESTINATION_IMAGES[key] || null;
+  return DESTINATION_IMAGES[key] || "https://images.unsplash.com/photo-1590050752117-238cb0fb12b1?auto=format&fit=crop&w=1500&q=85";
 }
 
 export const DEFAULT_INDIA_BANNERS = [

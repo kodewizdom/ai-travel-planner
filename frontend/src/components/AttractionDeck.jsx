@@ -1,5 +1,7 @@
 import React from 'react';
 
+const FALLBACK_ATTRACTION_IMG = "https://images.unsplash.com/photo-1590050752117-238cb0fb12b1?auto=format&fit=crop&w=480&q=80";
+
 export default function AttractionDeck({
   deckData,
   destination,
@@ -17,6 +19,18 @@ export default function AttractionDeck({
       <div className="stays-horizontal-list">
         {deckData.attractions?.slice(0, 7).map((att, idx) => (
           <article key={idx} className="stay-card-horizontal attraction-card-horizontal">
+            <div className="stay-thumb-box">
+              <img
+                src={att.image_url || FALLBACK_ATTRACTION_IMG}
+                alt={att.name}
+                className="stay-thumb-img"
+                onError={(e) => {
+                  e.currentTarget.src = FALLBACK_ATTRACTION_IMG;
+                }}
+              />
+              <span className="illustrative-photo-badge">Tourist spot</span>
+            </div>
+
             <div className="stay-info-col">
               <h4 className="stay-property-name">{att.name}</h4>
               <p className="stay-card-address">{att.address || `${att.name}, ${destination || 'City Center'}, India`}</p>

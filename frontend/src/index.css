@@ -12,10 +12,10 @@
   --text-main: #f1f5f9;
   --text-muted: #94a3b8;
   --text-dim: #64748b;
-  --accent: #ff4b4b;
-  --accent-hover: #ff3333;
-  --accent-glow: rgba(255, 75, 75, 0.22);
-  --accent-bg: rgba(255, 75, 75, 0.12);
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-glow: rgba(37, 99, 235, 0.28);
+  --accent-bg: rgba(37, 99, 235, 0.14);
   --success: #10b981;
   --scrollbar-thumb: #333d52;
   --scrollbar-thumb-hover: #475569;
@@ -894,10 +894,10 @@ body {
   justify-content: center;
   gap: 0.55rem;
   padding: 0.58rem 1.15rem;
-  background: #f0f4fc;
-  border: 1px solid #e0e8fa;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: 28px;
-  color: #425477;
+  color: var(--text-muted);
   font-size: 0.85rem;
   font-weight: 700;
   cursor: pointer;
@@ -906,14 +906,15 @@ body {
   box-shadow: none !important;
 }
 .capsule-btn:hover {
-  background: #e4edf9;
-  color: #1769e8;
+  background: var(--bg-card-hover);
+  color: var(--accent);
+  border-color: var(--border-color);
 }
 .capsule-btn.active {
-  background: #1769e8 !important;
+  background: var(--accent) !important;
   color: #ffffff !important;
-  border-color: #1769e8 !important;
-  box-shadow: none !important;
+  border-color: var(--accent) !important;
+  box-shadow: 0 2px 8px var(--accent-glow) !important;
 }
 
 .capsule-count-badge {
@@ -1024,7 +1025,7 @@ body {
 .flight-leg-sub {
   font-size: 0.8rem;
   font-weight: 600;
-  color: #1769e8;
+  color: var(--accent);
 }
 
 /* 1. COMPACT FLIGHT CARD (Half size, structured horizontally) */
@@ -1194,9 +1195,9 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  background: #38bdf8;
-  border: 1px solid #7dd3fc;
-  color: #0c1524 !important;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: #ffffff !important;
   text-decoration: none !important;
   padding: 0.35rem 0.8rem;
   border-radius: 6px;
@@ -1205,15 +1206,15 @@ body {
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
-  box-shadow: 0 2px 6px rgba(56, 189, 248, 0.25);
+  box-shadow: 0 2px 6px var(--accent-glow);
 }
 
 .compact-details-btn:hover {
-  background: #0ea5e9;
-  border-color: #38bdf8;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
   color: #ffffff !important;
   transform: translateY(-1px);
-  box-shadow: 0 4px 10px rgba(14, 165, 233, 0.4);
+  box-shadow: 0 4px 10px var(--accent-glow);
 }
 
 /* 2. COMPACT HOTEL / STAY CARD (Half size, structured horizontally with genuine rating & map link) */
@@ -1332,8 +1333,8 @@ body {
 }
 
 .compact-map-link:hover {
-  color: #38bdf8 !important;
-  background: rgba(56, 189, 248, 0.08);
+  color: var(--accent) !important;
+  background: var(--accent-bg);
 }
 
 .compact-map-link .map-icon {
@@ -1844,17 +1845,17 @@ body {
 }
 
 .portal-btn.btn-mmt {
-  background: #38bdf8;
-  color: #0c1524 !important;
-  border: 1px solid #7dd3fc;
-  box-shadow: 0 2px 6px rgba(56, 189, 248, 0.25);
+  background: var(--accent);
+  color: #ffffff !important;
+  border: 1px solid var(--accent);
+  box-shadow: 0 2px 6px var(--accent-glow);
 }
 
 .portal-btn.btn-mmt:hover {
-  background: #0ea5e9;
+  background: var(--accent-hover);
   color: #ffffff !important;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.35);
+  box-shadow: 0 4px 12px var(--accent-glow);
 }
 
 .portal-btn.btn-airline {
@@ -1864,17 +1865,17 @@ body {
 }
 
 .portal-btn.btn-airline.primary-portal {
-  background: #1d4ed8;
+  background: var(--accent);
   color: #ffffff !important;
-  border: 1px solid #2563eb;
-  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.28);
+  border: 1px solid var(--accent);
+  box-shadow: 0 2px 8px var(--accent-glow);
 }
 
 .portal-btn.btn-airline.primary-portal:hover {
-  background: #1e40af;
+  background: var(--accent-hover);
   color: #ffffff !important;
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(29, 78, 216, 0.38);
+  box-shadow: 0 4px 14px var(--accent-glow);
 }
 
 .portal-btn.btn-airline:hover {
@@ -2974,8 +2975,8 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  background: #2563eb;
-  border: 1px solid #1d4ed8;
+  background: var(--accent);
+  border: 1px solid var(--accent);
   color: #ffffff !important;
   text-decoration: none !important;
   font-size: 0.78rem;
@@ -2985,18 +2986,18 @@ body {
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
-  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.25);
+  box-shadow: 0 1px 3px var(--accent-glow);
 }
 
 .stay-action-btn:hover {
-  background: #1d4ed8;
-  border-color: #1e40af;
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
   transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(37, 99, 235, 0.35);
+  box-shadow: 0 3px 8px var(--accent-glow);
 }
 
 .stay-action-btn.secondary {
-  background: #1d4ed8;
+  background: var(--accent-hover);
 }
 
 .btn-arrow {
@@ -3103,8 +3104,8 @@ body {
 }
 
 .ask-about-btn {
-  background: #1769e8 !important;
-  border: 1px solid #1458c8 !important;
+  background: var(--accent) !important;
+  border: 1px solid var(--accent) !important;
   color: #ffffff !important;
   font-size: 0.78rem;
   font-weight: 700;
@@ -3113,11 +3114,14 @@ body {
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
+  box-shadow: 0 1px 4px var(--accent-glow);
 }
 
 .ask-about-btn:hover:not(:disabled) {
-  background: #0f55c2 !important;
+  background: var(--accent-hover) !important;
+  border-color: var(--accent-hover) !important;
   transform: translateY(-1px);
+  box-shadow: 0 3px 8px var(--accent-glow);
 }
 
 .ask-about-btn:disabled {
