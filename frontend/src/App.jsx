@@ -278,8 +278,15 @@ export default function App() {
     }
   };
 
+  const isInitialMount = useRef(true);
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    if (messages.length > 1 || isLoading) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages, isLoading, loadingStepIndex]);
 
   const handlePlanTrip = async (e) => {
