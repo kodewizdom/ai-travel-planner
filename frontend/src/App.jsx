@@ -1,22 +1,19 @@
 import React, { useState, useEffect, useRef } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import {
-  Send,
-  RotateCcw,
-  Bot,
-  User,
-  MoreVertical,
-  Printer,
-  Sun,
-  Moon,
-  Contrast,
-  ChevronsLeft,
-  ChevronsRight,
-  Compass,
-  ArrowRight,
-  SlidersHorizontal,
-} from 'lucide-react';
+import { Bot, Compass, Sparkles } from 'lucide-react';
+
+import { DEFAULT_INDIA_BANNERS, getDestinationData, getCityHeroImage, fetchWikipediaImage } from './destinationData';
+import { formatDate, sortFlightList } from './utils/flightUtils';
+
+import Sidebar from './components/Sidebar';
+import ChatPanel from './components/ChatPanel';
+import HeroBanner from './components/HeroBanner';
+import CapsuleNav from './components/CapsuleNav';
+import InitialDeckCard from './components/InitialDeckCard';
+import FlightDeck from './components/FlightDeck';
+import HotelDeck from './components/HotelDeck';
+import RestaurantDeck from './components/RestaurantDeck';
+import AttractionDeck from './components/AttractionDeck';
+import DetailModal from './components/DetailModal';
 
 const FALLBACK_CITIES = [
   "Agra", "Ahmedabad", "Amritsar", "Bengaluru (BLR)", "Bhopal", "Bhubaneswar",
@@ -37,10 +34,6 @@ const LOADING_STEPS = [
   'Finalizing itinerary details',
 ];
 
-function formatDate(date) {
-  return date.toISOString().split('T')[0];
-}
-
 export default function App() {
   const today = new Date();
   const defaultDeparture = new Date(today);
@@ -49,100 +42,201 @@ export default function App() {
   const defaultReturn = new Date(defaultDeparture);
   defaultReturn.setDate(defaultDeparture.getDate() + 3);
 
+  // Core Form State
   const [cities, setCities] = useState(FALLBACK_CITIES.map(c => ({ label: c, value: c.split(' (')[0] })));
   const [multiAirports, setMultiAirports] = useState({});
   const [origin, setOrigin] = useState('');
   const [originAirport, setOriginAirport] = useState('');
   const [destination, setDestination] = useState('');
   const [destinationAirport, setDestinationAirport] = useState('');
-  const [hotelPreference, setHotelPreference] = useState('tourist_attraction');
-  const [tripType, setTripType] = useState('round_trip');
+  const [tripType, setTripType] = useState('one_way');
   const [flightsOnly, setFlightsOnly] = useState(true);
-  const [travellers, setTravellers] = useState(2);
+  const [hotelPreference, setHotelPreference] = useState('tourist_attraction');
+  const [travellers, setTravellers] = useState(1);
   const [budget, setBudget] = useState('');
   const [departureDate, setDepartureDate] = useState(formatDate(defaultDeparture));
   const [returnDate, setReturnDate] = useState(formatDate(defaultReturn));
 
+  // Chat State
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isPlanningTrip, setIsPlanningTrip] = useState(false);
+  const [customDestImage, setCustomDestImage] = useState(null);
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const isLoading = isPlanningTrip || isChatLoading;
   const [loadingStepIndex, setLoadingStepIndex] = useState(0);
-  const [serverStatus, setServerStatus] = useState({ provider: 'groq', model: 'openai/gpt-oss-120b' });
 
-  // Theme & sidebar state (matching user design screenshots)
-  const [theme, setTheme] = useState(() => localStorage.getItem('travel_planner_theme') || 'system');
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth <= 900 : false);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(() => typeof window !== 'undefined' ? window.innerWidth > 900 : true);
+  // App Theme: defaults to light to match modern aesthetic
+  const [theme, setTheme] = useState(() => localStorage.getItem('travel_planner_theme') || 'light');
+  const [systemIsDark, setSystemIsDark] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return true;
+  });
+
+  // Mobile & Tablet Tab View State ("planner" or "itinerary")
+  const [mobileActiveTab, setMobileActiveTab] = useState('planner');
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 1024 : false);
+
+  // Right Section State
+  const [activeCapsule, setActiveCapsule] = useState('flights');
+  const [bannerIndex, setBannerIndex] = useState(0);
+  const [selectedItemDetail, setSelectedItemDetail] = useState(null);
+  const [flightSort, setFlightSort] = useState('recommended');
 
   const messagesEndRef = useRef(null);
-  const menuRef = useRef(null);
+  const chatScrollRef = useRef(null);
 
-  const hasSearched = messages.length > 0;
+  const hasSearched = messages.some(m => m.role === 'assistant');
 
-  // Track window resize for responsive layout
+  // Load destination details reactively in deckData state so suggestions can update it dynamically
+  const [deckData, setDeckData] = useState(() => getDestinationData(destination));
+
+  useEffect(() => {
+    const base = getDestinationData(destination);
+    if (!destination) {
+      setDeckData(base);
+      return;
+    }
+
+    setDeckData(base);
+
+    // 1. Fetch 12 live hotels for the destination
+    fetch('/api/hotels', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        destination,
+        check_in_date: departureDate,
+        check_out_date: returnDate,
+        adults: travellers,
+        rooms: 1
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.hotels && data.hotels.length > 0) {
+          setDeckData(prev => ({
+            ...prev,
+            hotels: data.hotels
+          }));
+        }
+      })
+      .catch(() => {});
+
+    // 2. Fetch authentic local restaurants for the destination
+    fetch('/api/restaurants', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        destination,
+        limit: 12
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.restaurants && data.restaurants.length > 0) {
+          setDeckData(prev => ({
+            ...prev,
+            restaurants: data.restaurants
+          }));
+        }
+      })
+      .catch(() => {});
+
+    // 3. Fetch top sights and places to visit for the destination (max 7)
+    fetch('/api/attractions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        destination,
+        limit: 7
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.attractions && data.attractions.length > 0) {
+          setDeckData(prev => ({
+            ...prev,
+            attractions: data.attractions.slice(0, 7)
+          }));
+        }
+      })
+      .catch(() => {});
+  }, [destination]);
+
+  // Lookup authentic destination photo whenever destination changes
+  useEffect(() => {
+    if (!destination) {
+      setCustomDestImage(null);
+      return;
+    }
+    const known = getCityHeroImage(destination);
+    if (known) {
+      setCustomDestImage(known);
+    } else {
+      let cancelled = false;
+      fetchWikipediaImage(destination).then(url => {
+        if (!cancelled && url) {
+          setCustomDestImage(url);
+        }
+      });
+      return () => { cancelled = true; };
+    }
+  }, [destination]);
+
+  // Auto-rotate Hero Banner every 7 seconds ONLY when exploring (no destination selected)
+  useEffect(() => {
+    if (destination) return;
+    const timer = setInterval(() => {
+      setBannerIndex(prev => (prev + 1) % DEFAULT_INDIA_BANNERS.length);
+    }, 7000);
+    return () => clearInterval(timer);
+  }, [destination]);
+
+  // Track window resize
   useEffect(() => {
     const handleResize = () => {
-      const mobile = window.innerWidth <= 900;
-      setIsMobile(mobile);
-      if (!mobile && !isSidebarOpen) {
-        // Keep desktop sidebar open by default on wider screens
-      }
+      setIsMobile(window.innerWidth < 1024);
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [isSidebarOpen]);
+  }, []);
 
-  // Apply theme to document
+  // Track system dark mode changes automatically
   useEffect(() => {
-    localStorage.setItem('travel_planner_theme', theme);
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e) => setSystemIsDark(e.matches);
+    mediaQuery.addEventListener('change', handler);
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, []);
 
-    const applyTheme = () => {
-      if (theme === 'system') {
-        const isDark = mediaQuery.matches;
-        document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
-      } else {
-        document.documentElement.setAttribute('data-theme', theme);
-      }
-    };
+  const isDarkMode = theme === 'system' ? systemIsDark : theme === 'dark';
 
-    applyTheme();
-
-    const listener = () => {
-      if (theme === 'system') applyTheme();
-    };
-
-    mediaQuery.addEventListener('change', listener);
-    return () => mediaQuery.removeEventListener('change', listener);
-  }, [theme]);
-
-  // Click outside to close settings menu
-  useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setIsMenuOpen(false);
-      }
-    };
-    if (isMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isMenuOpen]);
-
-  const handlePrint = () => {
-    setIsMenuOpen(false);
-    window.print();
+  const toggleTheme = () => {
+    const nextTheme = isDarkMode ? 'light' : 'dark';
+    setTheme(nextTheme);
+    localStorage.setItem('travel_planner_theme', nextTheme);
   };
 
-  // Rotate loading step messages while LLM is generating
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light');
+  }, [isDarkMode]);
+
+  // Reset banner index when destination changes
+  useEffect(() => {
+    setBannerIndex(0);
+  }, [destination]);
+
+  // Loading steps progress animation
   useEffect(() => {
     let interval = null;
     if (isLoading) {
       setLoadingStepIndex(0);
       interval = setInterval(() => {
         setLoadingStepIndex(prev => (prev + 1) % LOADING_STEPS.length);
-      }, 2300);
+      }, 2400);
     } else {
       setLoadingStepIndex(0);
     }
@@ -151,15 +245,8 @@ export default function App() {
     };
   }, [isLoading]);
 
-  // Fetch cities, multi-airports and server health on mount
+  // Fetch cities and multi-airports on mount
   useEffect(() => {
-    fetch('/api/health')
-      .then(res => res.json())
-      .then(data => {
-        if (data.model) setServerStatus(data);
-      })
-      .catch(() => {});
-
     fetch('/api/cities')
       .then(res => res.json())
       .then(data => {
@@ -191,18 +278,25 @@ export default function App() {
     }
   };
 
+  const isInitialMount = useRef(true);
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    if (messages.length > 1 || isLoading) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages, isLoading, loadingStepIndex]);
 
   const handlePlanTrip = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!origin || !destination) {
-      alert('Please select both From and To cities.');
+      alert('Please select both Origin and Destination cities.');
       return;
     }
     if (origin === destination) {
-      alert('From and To cities must be different.');
+      alert('Origin and Destination cities must be different.');
       return;
     }
 
@@ -231,13 +325,11 @@ export default function App() {
     const budgetText = budget.trim() ? ` · ₹${budget.trim()}` : '';
 
     const summaryText = isFlightsOnlyMode
-      ? `${origLabel} → ${destLabel} · One Way (7-Day Fares from ${departureDate}) · ${travellers} travellers${budgetText}`
-      : `${origLabel} → ${destLabel} · ${tripLabel} · ${travellers} travellers · ${hotelLabel} · ${datesText}${budgetText}`;
+      ? `${origLabel} → ${destLabel} · One Way (7-Day Fares from ${departureDate}) · ${travellers} traveller${travellers > 1 ? 's' : ''}${budgetText}`
+      : `${origLabel} → ${destLabel} · ${tripLabel} · ${travellers} traveller${travellers > 1 ? 's' : ''} · ${hotelLabel} · ${datesText}${budgetText}`;
 
-    setIsLoading(true);
-    if (isMobile) {
-      setIsSidebarOpen(false);
-    }
+    setIsPlanningTrip(true);
+
     try {
       const res = await fetch('/api/plan', {
         method: 'POST',
@@ -249,28 +341,63 @@ export default function App() {
         throw new Error(data.detail || 'Failed to generate itinerary');
       }
 
+      setDeckData(prev => ({
+        ...prev,
+        flights: data.outbound_flights || data.flights || prev.flights,
+        outbound_flights: data.outbound_flights || data.flights || prev.outbound_flights,
+        return_flights: data.return_flights || prev.return_flights || [],
+        trip_type: data.trip_type || tripType,
+        departure_date: data.departure_date || departureDate,
+        return_date: data.return_date || returnDate,
+        hotels: (data.hotels && data.hotels.length > 0) ? data.hotels : prev.hotels,
+        restaurants: (data.restaurants && data.restaurants.length > 0) ? data.restaurants : prev.restaurants,
+        attractions: ((data.attractions && data.attractions.length > 0) ? data.attractions : (prev.attractions || [])).slice(0, 7)
+      }));
+
+      // Format clean Places to visit message matching reference!
+      const placesList = (data.attractions && data.attractions.length > 0)
+        ? data.attractions
+        : (deckData.attractions || []);
+
+      const placesReplyText = placesList && placesList.length > 0
+        ? ["Places to visit\n", ...placesList.slice(0, 4).map(p => `• ${p.name}\n`)].join("\n")
+        : "Places to visit\n\nNo places to visit were returned for this trip. You can ask me to search again.";
+
       setMessages(prev => [
         ...prev,
         { role: 'user', content: data.prompt, isInternal: true, summary: summaryText },
-        { role: 'assistant', content: data.reply }
+        {
+          role: 'assistant',
+          content: placesReplyText,
+          isPlanResult: false,
+          destName: destination
+        }
       ]);
+
+      // Automatically focus on flight results tab and switch to Itinerary on mobile/tablet
+      setActiveCapsule('flights');
+      if (isMobile) {
+        setMobileActiveTab('itinerary');
+      }
     } catch (err) {
       alert(`Error: ${err.message}`);
     } finally {
-      setIsLoading(false);
+      setIsPlanningTrip(false);
     }
   };
 
-  const handleSendMessage = async (e) => {
-    e.preventDefault();
-    if (!hasSearched) return;
-    const text = inputText.trim();
+  const handleSendMessage = async (e, customText = null) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const text = (customText !== null ? customText : inputText).trim();
     if (!text || isLoading) return;
 
-    setInputText('');
+    if (customText === null) {
+      setInputText('');
+    }
     const newMessages = [...messages, { role: 'user', content: text, isInternal: false }];
     setMessages(newMessages);
-    setIsLoading(true);
+    setIsChatLoading(true);
+    if (isMobile) setMobileActiveTab('planner');
 
     try {
       const res = await fetch('/api/chat', {
@@ -286,30 +413,55 @@ export default function App() {
         throw new Error(data.detail || 'Failed to process message');
       }
 
-      setMessages([...newMessages, { role: 'assistant', content: data.reply }]);
+      // 1. Check if user or reply mentioned a new destination city
+      const lowerQuery = text.toLowerCase();
+      for (const c of FALLBACK_CITIES) {
+        const cName = c.split(' (')[0];
+        const regex = new RegExp(`\\b${cName.toLowerCase()}\\b`, 'i');
+        if (regex.test(lowerQuery)) {
+          setDestination(cName);
+          break;
+        }
+      }
+
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: data.reply,
+          isInternal: false
+        }
+      ]);
     } catch (err) {
-      setMessages([
-        ...newMessages,
-        { role: 'assistant', content: `Error: ${err.message}` }
+      setMessages(prev => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: `Sorry, I encountered an issue: ${err.message}`,
+          isInternal: false
+        }
       ]);
     } finally {
-      setIsLoading(false);
+      setIsChatLoading(false);
     }
   };
 
+  const handleAskAboutPlace = (place) => {
+    const question = `What should I know before visiting ${place.name}${destination ? ` in ${destination}` : ''}?`;
+    handleSendMessage(null, question);
+  };
+
   const handleResetAll = () => {
-    // Clear route and airport selections
     setOrigin('');
     setOriginAirport('');
     setDestination('');
     setDestinationAirport('');
-    setHotelPreference('tourist_attraction');
-    setTripType('round_trip');
+    setTripType('one_way');
     setFlightsOnly(true);
-    setTravellers(2);
+    setHotelPreference('tourist_attraction');
+    setTravellers(1);
     setBudget('');
 
-    // Recompute clean fresh departure & return dates
     const freshToday = new Date();
     const freshDep = new Date(freshToday);
     freshDep.setDate(freshToday.getDate() + 14);
@@ -318,462 +470,192 @@ export default function App() {
     setDepartureDate(formatDate(freshDep));
     setReturnDate(formatDate(freshRet));
 
-    // Clear chat conversation, inputs, and loading state
     setMessages([]);
     setInputText('');
-    setIsLoading(false);
-    setLoadingStepIndex(0);
+    setDeckData(getDestinationData(''));
+    setActiveCapsule('flights');
+    setBannerIndex(0);
+    setSelectedItemDetail(null);
+  };
 
-    // Ensure the sidebar form is open and ready
-    setIsSidebarOpen(true);
+  const sortedOutbound = sortFlightList(deckData.outbound_flights || deckData.flights || [], flightSort);
+  const sortedReturn = sortFlightList(deckData.return_flights || [], flightSort);
+  const sortedFlights = sortedOutbound;
+
+  const currentDefaultBanner = DEFAULT_INDIA_BANNERS[bannerIndex % DEFAULT_INDIA_BANNERS.length] || DEFAULT_INDIA_BANNERS[0];
+  const activeHeroImage = destination
+    ? (customDestImage || getCityHeroImage(destination) || currentDefaultBanner.image)
+    : currentDefaultBanner.image;
+  const activeHeroTitle = destination
+    ? destination
+    : (currentDefaultBanner?.title?.includes(',') ? currentDefaultBanner.title.split(',')[1].trim() : (currentDefaultBanner?.title || 'India'));
+
+  const tripFormProps = {
+    origin,
+    handleOriginChange,
+    destination,
+    handleDestinationChange,
+    originAirport,
+    setOriginAirport,
+    destinationAirport,
+    setDestinationAirport,
+    cities,
+    multiAirports,
+    tripType,
+    setTripType,
+    travellers,
+    setTravellers,
+    budget,
+    setBudget,
+    departureDate,
+    setDepartureDate,
+    returnDate,
+    setReturnDate,
+    isLoading,
+    handlePlanTrip,
+    handleResetAll,
+    today
   };
 
   return (
-    <div className="app-container">
-      {/* Mobile Backdrop */}
-      {isMobile && isSidebarOpen && (
-        <div
-          className="sidebar-backdrop"
-          onClick={() => setIsSidebarOpen(false)}
-        />
-      )}
+    <div className="app-viewport">
+      {/* SIDEBAR NAVIGATION */}
+      <Sidebar
+        isDarkMode={isDarkMode}
+        toggleTheme={toggleTheme}
+        onSelectPlanner={() => {
+          if (isMobile) setMobileActiveTab('planner');
+        }}
+      />
 
-      {/* Sidebar Form */}
-      <aside className={`sidebar ${isSidebarOpen ? 'open' : 'collapsed'}`}>
-        <div className="sidebar-header">
-          <div className="sidebar-header-top">
-            <h2>Trip Details</h2>
+      {/* Main Workspace Area */}
+      <div className="app-main-workspace">
+        {/* Mobile & Tablet Top View Switcher */}
+        {isMobile && (
+          <div className="mobile-tab-bar">
             <button
               type="button"
-              className="sidebar-collapse-btn"
-              onClick={() => setIsSidebarOpen(false)}
-              title="Close sidebar"
+              className={`mobile-tab-btn ${mobileActiveTab === 'planner' ? 'active' : ''}`}
+              onClick={() => setMobileActiveTab('planner')}
             >
-              <ChevronsLeft size={18} />
+              <Sparkles size={15} />
+              <span>Trip Planner</span>
             </button>
-          </div>
-          <div className="caption">Domestic routes in India</div>
-        </div>
-
-        <form onSubmit={handlePlanTrip}>
-          {/* Origin */}
-          <div className="form-group">
-            <label>Origin</label>
-            <select value={origin} onChange={e => handleOriginChange(e.target.value)} required>
-              <option value="">Select origin...</option>
-              {cities.map(c => (
-                <option key={c.label} value={c.value}>{c.label}</option>
-              ))}
-            </select>
-            {multiAirports[origin] && (
-              <div className="airport-subselect">
-                <span className="sub-label">Departure Airport</span>
-                <select
-                  value={originAirport}
-                  onChange={e => setOriginAirport(e.target.value)}
-                  className="airport-dropdown"
-                >
-                  {multiAirports[origin].map(ap => (
-                    <option key={ap.code} value={ap.code}>{ap.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-
-          {/* Destination */}
-          <div className="form-group">
-            <label>Destination</label>
-            <select value={destination} onChange={e => handleDestinationChange(e.target.value)} required>
-              <option value="">Select destination...</option>
-              {cities.map(c => (
-                <option key={c.label} value={c.value}>{c.label}</option>
-              ))}
-            </select>
-            {multiAirports[destination] && (
-              <div className="airport-subselect">
-                <span className="sub-label">Arrival Airport</span>
-                <select
-                  value={destinationAirport}
-                  onChange={e => setDestinationAirport(e.target.value)}
-                  className="airport-dropdown"
-                >
-                  {multiAirports[destination].map(ap => (
-                    <option key={ap.code} value={ap.code}>{ap.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-
-          {/* Travel Type */}
-          <div className="form-group">
-            <label>Travel Type</label>
-            <div className="radio-group">
-              <button
-                type="button"
-                className={`radio-btn ${tripType === 'round_trip' ? 'active' : ''}`}
-                onClick={() => setTripType('round_trip')}
-              >
-                Round Trip
-              </button>
-              <button
-                type="button"
-                className={`radio-btn ${tripType === 'one_way' ? 'active' : ''}`}
-                onClick={() => setTripType('one_way')}
-              >
-                One Way
-              </button>
-            </div>
-
-            {tripType === 'one_way' && (
-              <div className="airport-subselect">
-                <span className="sub-label">One-Way Mode</span>
-                <div className="radio-group">
-                  <button
-                    type="button"
-                    className={`radio-btn ${flightsOnly ? 'active' : ''}`}
-                    onClick={() => setFlightsOnly(true)}
-                  >
-                    7-Day Flights Only
-                  </button>
-                  <button
-                    type="button"
-                    className={`radio-btn ${!flightsOnly ? 'active' : ''}`}
-                    onClick={() => setFlightsOnly(false)}
-                  >
-                    Full Trip Plan
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Hotel Location Preference (hidden in Flights-Only mode) */}
-          {!(tripType === 'one_way' && flightsOnly) && (
-            <div className="form-group">
-              <label>Hotel Location</label>
-              <div className="preference-badge-group">
-                <button
-                  type="button"
-                  className={`pref-btn ${hotelPreference === 'tourist_attraction' ? 'active' : ''}`}
-                  onClick={() => setHotelPreference('tourist_attraction')}
-                >
-                  City Center
-                </button>
-                <button
-                  type="button"
-                  className={`pref-btn ${hotelPreference === 'near_airport' ? 'active' : ''}`}
-                  onClick={() => setHotelPreference('near_airport')}
-                >
-                  Airport Transit
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Travellers & Budget */}
-          <div className="form-row">
-            <div className="form-group">
-              <label>Travellers</label>
-              <input
-                type="number"
-                min="1"
-                max="9"
-                value={travellers}
-                onChange={e => setTravellers(e.target.value)}
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label>Budget (₹)</label>
-              <input
-                type="text"
-                placeholder="e.g. 30000"
-                value={budget}
-                onChange={e => setBudget(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {/* Dates */}
-          <div className="form-row">
-            <div className="form-group">
-              <label>{tripType === 'one_way' && flightsOnly ? 'Start Date' : 'Departure'}</label>
-              <input
-                type="date"
-                min={formatDate(today)}
-                value={departureDate}
-                onChange={e => {
-                  setDepartureDate(e.target.value);
-                  if (returnDate < e.target.value) {
-                    setReturnDate(e.target.value);
-                  }
-                }}
-                required
-              />
-            </div>
-            {tripType === 'one_way' && flightsOnly ? (
-              <div className="form-group">
-                <label>Window</label>
-                <input
-                  type="text"
-                  value="7 Days (1 Week)"
-                  disabled
-                  readOnly
-                />
-              </div>
-            ) : (
-              <div className="form-group">
-                <label>Return</label>
-                <input
-                  type="date"
-                  min={departureDate}
-                  value={returnDate}
-                  disabled={tripType === 'one_way'}
-                  onChange={e => setReturnDate(e.target.value)}
-                  required={tripType === 'round_trip'}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Plan Trip Button */}
-          <button type="submit" className="btn-primary" disabled={isLoading}>
-            <span>
-              {isLoading
-                ? (tripType === 'one_way' && flightsOnly ? 'Comparing 7-Day Fares...' : 'Generating Plan...')
-                : (tripType === 'one_way' && flightsOnly ? 'Search 7-Day Flights' : 'Generate Itinerary')}
-            </span>
-          </button>
-        </form>
-
-        <button type="button" className="btn-secondary" onClick={handleResetAll} title="Clear form and start a new trip">
-          <RotateCcw size={14} />
-          <span>Reset Form</span>
-        </button>
-      </aside>
-
-      {/* Main Chat Area */}
-      <main className="main-chat">
-        <header className="chat-header">
-          <div className="chat-header-main">
-            {(!isSidebarOpen || isMobile) && (
-              <button
-                type="button"
-                className="sidebar-reopen-btn"
-                onClick={() => setIsSidebarOpen(prev => !prev)}
-                title="Configure Trip Details"
-              >
-                {isMobile ? <SlidersHorizontal size={15} /> : <ChevronsRight size={17} />}
-                <span className="sidebar-btn-label">Trip Details</span>
-              </button>
-            )}
-            <div className="header-titles">
-              <h1>Travel Planner</h1>
-              <p>Domestic routes, flight schedules, stays, and regional guides</p>
-            </div>
-          </div>
-
-          {/* Options Menu Button & Dropdown */}
-          <div className="header-menu-container" ref={menuRef}>
             <button
               type="button"
-              className={`header-menu-btn ${isMenuOpen ? 'active' : ''}`}
-              onClick={() => setIsMenuOpen(prev => !prev)}
-              title="Options"
+              className={`mobile-tab-btn ${mobileActiveTab === 'itinerary' ? 'active' : ''}`}
+              onClick={() => setMobileActiveTab('itinerary')}
             >
-              <MoreVertical size={18} />
+              <Compass size={15} />
+              <span>Live Itinerary</span>
+              {hasSearched && (
+                <span className="mobile-tab-badge">Ready</span>
+              )}
             </button>
-
-            {isMenuOpen && (
-              <div className="settings-dropdown">
-                <div className="theme-toggle-row">
-                  <button
-                    type="button"
-                    className={`theme-btn ${theme === 'system' ? 'active' : ''}`}
-                    onClick={() => setTheme('system')}
-                  >
-                    <Contrast size={17} />
-                    <span>System</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`theme-btn ${theme === 'light' ? 'active' : ''}`}
-                    onClick={() => setTheme('light')}
-                  >
-                    <Sun size={17} />
-                    <span>Light</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`theme-btn ${theme === 'dark' ? 'active' : ''}`}
-                    onClick={() => setTheme('dark')}
-                  >
-                    <Moon size={17} />
-                    <span>Dark</span>
-                  </button>
-                </div>
-
-                <div className="dropdown-divider" />
-
-                <button
-                  type="button"
-                  className="dropdown-menu-item"
-                  onClick={handlePrint}
-                >
-                  <Printer size={15} />
-                  <span>Print Itinerary</span>
-                </button>
-              </div>
-            )}
           </div>
-        </header>
+        )}
 
-        {/* Messages Feed */}
-        <div className="messages-container">
-          {messages.length === 0 && !isLoading && (
-            <div className="welcome-box">
-              <div className="welcome-icon-wrapper">
-                <Compass size={32} strokeWidth={1.5} />
-              </div>
-              <h3>Where to next?</h3>
-              <p>
-                Configure your route and dates in the sidebar to generate a complete travel itinerary.
-              </p>
-              <div className="quick-routes">
-                <button
-                  type="button"
-                  className="route-chip"
-                  onClick={() => {
-                    handleOriginChange('Delhi');
-                    handleDestinationChange('Goa');
-                    if (isMobile) setIsSidebarOpen(true);
-                  }}
-                >
-                  Delhi → Goa
-                </button>
-                <button
-                  type="button"
-                  className="route-chip"
-                  onClick={() => {
-                    handleOriginChange('Mumbai');
-                    handleDestinationChange('Jaipur');
-                    if (isMobile) setIsSidebarOpen(true);
-                  }}
-                >
-                  Mumbai → Jaipur
-                </button>
-                <button
-                  type="button"
-                  className="route-chip"
-                  onClick={() => {
-                    handleOriginChange('Bengaluru');
-                    handleDestinationChange('Kochi');
-                    if (isMobile) setIsSidebarOpen(true);
-                  }}
-                >
-                  Bengaluru → Kochi
-                </button>
-              </div>
-            </div>
-          )}
+        <div className="layout-split-container">
+          {/* ================= LEFT PANEL: CHATBOT & EMBEDDED TRIP FORM ================= */}
+          <ChatPanel
+            isMobile={isMobile}
+            mobileActiveTab={mobileActiveTab}
+            chatScrollRef={chatScrollRef}
+            messagesEndRef={messagesEndRef}
+            messages={messages}
+            isLoading={isLoading}
+            inputText={inputText}
+            setInputText={setInputText}
+            handleSendMessage={handleSendMessage}
+            tripFormProps={tripFormProps}
+            hasSearched={hasSearched}
+            onViewItinerary={() => setMobileActiveTab('itinerary')}
+          />
 
-          {messages.map((msg, index) => {
-            if (msg.isInternal) {
-              return (
-                <div key={index} className="trip-pill-container">
-                  <div className="trip-pill-badge">
-                    <Compass size={14} />
-                    <span>{msg.summary}</span>
-                  </div>
-                </div>
-              );
-            }
-
-            return (
-              <div key={index} className={`message-row ${msg.role}`}>
-                <div className="message-avatar">
-                  {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
-                </div>
-                <div className="message-content markdown-body">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {msg.content}
-                  </ReactMarkdown>
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Active, animated multi-step loading card */}
-          {isLoading && (
-            <div className="message-row assistant">
-              <div className="message-avatar">
-                <Bot size={16} />
-              </div>
-              <div className="loading-card">
-                <div className="loading-card-top">
-                  <div className="step-counter-badge">
-                    <span>0{loadingStepIndex + 1}</span>
-                  </div>
-                  <div className="loading-text-container">
-                    <div className="loading-status-text">
-                      {LOADING_STEPS[loadingStepIndex]}
-                    </div>
-                    <div className="loading-subtext">
-                      Querying live aviation and accommodation datasets...
-                    </div>
-                  </div>
-                </div>
-                <div className="loading-progress-track">
-                  <div
-                    className="loading-progress-bar"
-                    style={{
-                      width: `${((loadingStepIndex + 1) / LOADING_STEPS.length) * 100}%`
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Bottom Chat Input */}
-        <div className={`chat-input-bar ${!hasSearched ? 'locked' : ''}`}>
-          <form className="input-form" onSubmit={handleSendMessage}>
-            <input
-              type="text"
-              placeholder={
-                hasSearched
-                  ? "Ask a follow-up or refine this itinerary..."
-                  : "Generate an itinerary from the sidebar to ask questions..."
-              }
-              value={inputText}
-              onChange={e => setInputText(e.target.value)}
-              disabled={isLoading || !hasSearched}
+          {/* ================= RIGHT PANEL: VISUAL BANNER & 4-CAPSULE EXPLORER ================= */}
+          <div className={`panel-right ${isMobile && mobileActiveTab !== 'itinerary' ? 'hidden-mobile' : ''}`}>
+            {/* TOP: VISUAL HERO BANNER */}
+            <HeroBanner
+              activeHeroImage={activeHeroImage}
+              activeHeroTitle={activeHeroTitle}
             />
-            <button
-              type="submit"
-              className="btn-send"
-              disabled={isLoading || !hasSearched || !inputText.trim()}
-              title={hasSearched ? "Send message" : "Generate itinerary first"}
-            >
-              <Send size={15} />
-            </button>
-          </form>
-          {!hasSearched && (
-            <div className="input-locked-hint">
-              Configure your trip details and click Generate Itinerary to start chatting.
-            </div>
-          )}
-        </div>
 
-        <div className="disclaimer-caption">
-          Estimates only. Verify fares and schedules directly with service providers.
+            {/* MIDDLE: 4 CAPSULE FILTER BUTTONS */}
+            <CapsuleNav
+              activeCapsule={activeCapsule}
+              setActiveCapsule={setActiveCapsule}
+            />
+
+            {/* BOTTOM DECK: When planning trip, show clean Checking travel options state! */}
+            {isPlanningTrip || !hasSearched ? (
+              <InitialDeckCard
+                activeCapsule={activeCapsule}
+                isPlanningTrip={isPlanningTrip}
+              />
+            ) : (
+              <div className="capsule-content-deck">
+                {/* 1. FLIGHTS TAB */}
+                {activeCapsule === 'flights' && (
+                  <FlightDeck
+                    deckData={deckData}
+                    origin={origin}
+                    destination={destination}
+                    departureDate={departureDate}
+                    returnDate={returnDate}
+                    tripType={tripType}
+                    flightSort={flightSort}
+                    setFlightSort={setFlightSort}
+                    sortedOutbound={sortedOutbound}
+                    sortedReturn={sortedReturn}
+                    sortedFlights={sortedFlights}
+                    onSelectFlight={(flight) => setSelectedItemDetail({ type: 'flight', data: flight })}
+                  />
+                )}
+
+                {/* 2. HOTELS TAB */}
+                {activeCapsule === 'hotels' && (
+                  <HotelDeck
+                    deckData={deckData}
+                    destination={destination}
+                    onSelectHotel={(hotel) => setSelectedItemDetail({ type: 'hotel', data: hotel })}
+                  />
+                )}
+
+                {/* 3. RESTAURANTS TAB */}
+                {activeCapsule === 'restaurants' && (
+                  <RestaurantDeck
+                    deckData={deckData}
+                    destination={destination}
+                  />
+                )}
+
+                {/* 4. ATTRACTIONS TAB (PLACES TO VISIT) */}
+                {activeCapsule === 'attractions' && (
+                  <AttractionDeck
+                    deckData={deckData}
+                    destination={destination}
+                    isLoading={isLoading}
+                    handleAskAboutPlace={handleAskAboutPlace}
+                  />
+                )}
+              </div>
+            )}
+          </div>
         </div>
-      </main>
+      </div>
+
+      {/* ================= MODAL / POPUP FOR "VIEW DETAILS" ================= */}
+      <DetailModal
+        selectedItemDetail={selectedItemDetail}
+        setSelectedItemDetail={setSelectedItemDetail}
+        origin={origin}
+        destination={destination}
+        departureDate={departureDate}
+        returnDate={returnDate}
+        setInputText={setInputText}
+        isMobile={isMobile}
+        setMobileActiveTab={setMobileActiveTab}
+      />
     </div>
   );
 }

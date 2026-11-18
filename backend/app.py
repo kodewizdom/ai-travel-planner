@@ -115,6 +115,17 @@ class PlanRequest(BaseModel):
     conversation_history: list[dict[str, Any]] = []
 
 
+class FlightSearchRequest(BaseModel):
+    origin: str
+    destination: str
+    origin_airport: str | None = None
+    destination_airport: str | None = None
+    departure_date: str
+    return_date: str | None = None
+    travellers: int = 1
+    trip_type: str = "one_way"
+
+
 @app.get("/api/health")
 def health_check():
     return {
@@ -145,6 +156,169 @@ def handle_chat(req: ChatRequest):
     except Exception as e:
         log_step("api_error", str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def format_flight_card(opt: dict[str, Any], leg_orig: str, leg_dest: str, leg_date: str | None, data_source: str, is_live: bool) -> dict[str, Any]:
+    airline = opt.get("airline", "Domestic Carrier")
+    flight_no = opt.get("flightNo") or opt.get("flight_number") or ""
+    dep_time = opt.get("departureTime") or opt.get("departure", "07:00")
+    arr_time = opt.get("arrivalTime") or opt.get("arrival", "09:15")
+    duration = opt.get("duration", "2h 15m")
+    stops = opt.get("stops", "Non-stop")
+    price = int(opt.get("price", 5490))
+    portal = tools.get_airline_portal(airline, flight_no)
+    airline_url = opt.get("airline_url") or opt.get("booking_link") or portal["url"]
+    airline_name = opt.get("airline_name") or (portal["name"] if portal["name"] != "Airline Official" else airline)
+    return {
+        "airline": airline_name,
+        "flightNo": flight_no,
+        "departureTime": dep_time,
+        "arrivalTime": arr_time,
+        "duration": duration,
+        "stops": stops,
+        "price": price,
+        "aircraft": opt.get("aircraft", "Airbus A320neo"),
+        "baggage": opt.get("baggage", "7kg Cabin · 15kg Check-in"),
+        "origin": leg_orig,
+        "destination": leg_dest,
+        "route": f"{leg_orig} → {leg_dest}",
+        "date": leg_date or "",
+        "isLive": is_live,
+        "dataSource": data_source,
+        "booking_link": airline_url,
+        "airline_url": airline_url,
+        "airline_name": airline_name,
+    }
+
+
+@app.post("/api/flights")
+def get_flights(req: FlightSearchRequest):
+    try:
+        orig = req.origin_airport or req.origin
+        dest = req.destination_airport or req.destination
+        flight_result = tools.search_flights(
+            origin=orig,
+            destination=dest,
+            departure_date=req.departure_date,
+            return_date=req.return_date if req.trip_type == "round_trip" else None,
+            adults=req.travellers,
+            currency="INR",
+            trip_type=req.trip_type,
+        )
+        data_source = flight_result.get("data_source", "Google Flights")
+        is_live = flight_result.get("live_pricing", False) or "Live" in str(data_source)
+        
+        outbound_raw = flight_result.get("outbound_flights") or flight_result.get("options") or []
+        return_raw = flight_result.get("return_flights") or [] if req.trip_type == "round_trip" else []
+        
+        outbound_flights = [format_flight_card(opt, orig, dest, req.departure_date, data_source, is_live) for opt in outbound_raw]
+        return_flights = [format_flight_card(opt, dest, orig, req.return_date, data_source, is_live) for opt in return_raw]
+
+        return {
+            "status": "success",
+            "trip_type": req.trip_type,
+            "departure_date": req.departure_date,
+            "return_date": req.return_date if req.trip_type == "round_trip" else None,
+            "flights": outbound_flights,
+            "outbound_flights": outbound_flights,
+            "return_flights": return_flights,
+            "data_source": data_source,
+            "booking_link": flight_result.get("booking_link"),
+        }
+    except Exception as e:
+        log_step("flights_api_error", str(e))
+        return {
+            "status": "fallback",
+            "flights": [],
+            "outbound_flights": [],
+            "return_flights": [],
+            "error": str(e),
+        }
+
+
+class HotelSearchRequest(BaseModel):
+    destination: str
+    check_in_date: str | None = None
+    check_out_date: str | None = None
+    adults: int = 1
+    rooms: int = 1
+
+
+@app.post("/api/hotels")
+def get_hotels(req: HotelSearchRequest):
+    try:
+        from datetime import datetime, timedelta
+        check_in = req.check_in_date or datetime.today().strftime("%Y-%m-%d")
+        check_out = req.check_out_date or (datetime.today() + timedelta(days=2)).strftime("%Y-%m-%d")
+        result = tools.search_hotels(
+            destination=req.destination,
+            check_in_date=check_in,
+            check_out_date=check_out,
+            adults=req.adults,
+            rooms=req.rooms,
+        )
+        return {
+            "status": "success",
+            "destination": req.destination,
+            "hotels": result.get("hotels", []),
+            "data_source": result.get("data_source", "Google Hotels & Verified Properties"),
+        }
+    except Exception as e:
+        log_step("hotels_api_error", str(e))
+        return {
+            "status": "fallback",
+            "hotels": [],
+            "error": str(e),
+        }
+
+
+class RestaurantSearchRequest(BaseModel):
+    destination: str
+    limit: int = 12
+
+
+@app.post("/api/restaurants")
+def get_restaurants(req: RestaurantSearchRequest):
+    try:
+        result = tools.search_restaurants(destination=req.destination, limit=req.limit)
+        return {
+            "status": "success",
+            "destination": req.destination,
+            "restaurants": result.get("restaurants", []),
+            "total": result.get("total", 0),
+        }
+    except Exception as e:
+        log_step("restaurants_api_error", str(e))
+        return {
+            "status": "fallback",
+            "restaurants": [],
+            "error": str(e),
+        }
+
+
+class AttractionSearchRequest(BaseModel):
+    destination: str
+    limit: int = 10
+
+
+@app.post("/api/attractions")
+def get_attractions(req: AttractionSearchRequest):
+    try:
+        result = tools.search_attractions(destination=req.destination, limit=req.limit)
+        return {
+            "status": "success",
+            "destination": req.destination,
+            "attractions": result.get("attractions", []),
+            "summary": result.get("summary", ""),
+            "total": result.get("total", 0),
+        }
+    except Exception as e:
+        log_step("attractions_api_error", str(e))
+        return {
+            "status": "fallback",
+            "attractions": [],
+            "error": str(e),
+        }
 
 
 @app.post("/api/plan")
@@ -200,11 +374,76 @@ def handle_plan(req: PlanRequest):
             "hotel options meeting the location preference, restaurants, itinerary, and budget."
         )
 
+    # Concurrently search live flights & hotels for the right-hand panel
+    live_outbound_flights = []
+    live_return_flights = []
+    live_hotels = []
+    live_restaurants = []
+    live_attractions = []
+    flight_data_source = "Google Flights"
+    try:
+        orig = req.origin_airport or req.origin
+        dest = req.destination_airport or req.destination
+        flight_result = tools.search_flights(
+            origin=orig,
+            destination=dest,
+            departure_date=req.departure_date,
+            return_date=req.return_date if req.trip_type == "round_trip" else None,
+            adults=req.travellers,
+            currency="INR",
+            trip_type=req.trip_type,
+        )
+        flight_data_source = flight_result.get("data_source", "Google Flights")
+        is_live = flight_result.get("live_pricing", False) or "Live" in str(flight_data_source)
+        
+        outbound_raw = flight_result.get("outbound_flights") or flight_result.get("options") or []
+        return_raw = flight_result.get("return_flights") or [] if req.trip_type == "round_trip" else []
+        
+        live_outbound_flights = [format_flight_card(opt, orig, dest, req.departure_date, flight_data_source, is_live) for opt in outbound_raw]
+        live_return_flights = [format_flight_card(opt, dest, orig, req.return_date, flight_data_source, is_live) for opt in return_raw]
+    except Exception as fl_err:
+        log_step("plan_flights_lookup_err", str(fl_err))
+
+    try:
+        hotel_res = tools.search_hotels(
+            destination=req.destination,
+            check_in_date=req.departure_date,
+            check_out_date=req.return_date or req.departure_date,
+            adults=req.travellers,
+            rooms=1,
+            location_preference=req.hotel_preference,
+        )
+        live_hotels = hotel_res.get("hotels") or []
+    except Exception as h_err:
+        log_step("plan_hotels_lookup_err", str(h_err))
+
+    try:
+        r_res = tools.search_restaurants(destination=req.destination, limit=12)
+        live_restaurants = r_res.get("restaurants") or []
+    except Exception as r_err:
+        log_step("plan_restaurants_lookup_err", str(r_err))
+
+    try:
+        a_res = tools.search_attractions(destination=req.destination, limit=7)
+        live_attractions = (a_res.get("attractions") or [])[:7]
+    except Exception as a_err:
+        log_step("plan_attractions_lookup_err", str(a_err))
+
     try:
         reply = travel_agent.chat(form_prompt, req.conversation_history)
         return {
             "prompt": form_prompt,
             "reply": reply,
+            "trip_type": req.trip_type,
+            "departure_date": req.departure_date,
+            "return_date": req.return_date if req.trip_type == "round_trip" else None,
+            "flights": live_outbound_flights,
+            "outbound_flights": live_outbound_flights,
+            "return_flights": live_return_flights,
+            "hotels": live_hotels,
+            "restaurants": live_restaurants,
+            "attractions": live_attractions,
+            "data_source": flight_data_source,
             "status": "success",
         }
     except Exception as e:
