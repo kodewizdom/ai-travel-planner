@@ -75,8 +75,8 @@ export default function App() {
     return true;
   });
 
-  // Mobile Tab View State ("chat" or "explorer")
-  const [mobileActiveTab, setMobileActiveTab] = useState('chat');
+  // Mobile & Tablet Tab View State ("planner" or "itinerary")
+  const [mobileActiveTab, setMobileActiveTab] = useState('planner');
   const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 1024 : false);
 
   // Right Section State
@@ -367,8 +367,11 @@ export default function App() {
         }
       ]);
 
-      // Automatically focus on flight results tab in explorer
+      // Automatically focus on flight results tab and switch to Itinerary on mobile/tablet
       setActiveCapsule('flights');
+      if (isMobile) {
+        setMobileActiveTab('itinerary');
+      }
     } catch (err) {
       alert(`Error: ${err.message}`);
     } finally {
@@ -387,7 +390,7 @@ export default function App() {
     const newMessages = [...messages, { role: 'user', content: text, isInternal: false }];
     setMessages(newMessages);
     setIsChatLoading(true);
-    if (isMobile) setMobileActiveTab('chat');
+    if (isMobile) setMobileActiveTab('planner');
 
     try {
       const res = await fetch('/api/chat', {
@@ -514,36 +517,39 @@ export default function App() {
         isDarkMode={isDarkMode}
         toggleTheme={toggleTheme}
         onSelectPlanner={() => {
-          if (isMobile) setMobileActiveTab('chat');
+          if (isMobile) setMobileActiveTab('planner');
         }}
       />
 
       {/* Main Workspace Area */}
       <div className="app-main-workspace">
-        {/* Mobile Top View Switcher */}
+        {/* Mobile & Tablet Top View Switcher */}
         {isMobile && (
           <div className="mobile-tab-bar">
             <button
               type="button"
-              className={`mobile-tab-btn ${mobileActiveTab === 'chat' ? 'active' : ''}`}
-              onClick={() => setMobileActiveTab('chat')}
+              className={`mobile-tab-btn ${mobileActiveTab === 'planner' ? 'active' : ''}`}
+              onClick={() => setMobileActiveTab('planner')}
             >
-              <Bot size={16} />
-              <span>AI Travel Chat</span>
+              <Sparkles size={15} />
+              <span>Trip Planner</span>
             </button>
             <button
               type="button"
-              className={`mobile-tab-btn ${mobileActiveTab === 'explorer' ? 'active' : ''}`}
-              onClick={() => setMobileActiveTab('explorer')}
+              className={`mobile-tab-btn ${mobileActiveTab === 'itinerary' ? 'active' : ''}`}
+              onClick={() => setMobileActiveTab('itinerary')}
             >
-              <Compass size={16} />
-              <span>Visual Explorer</span>
+              <Compass size={15} />
+              <span>Live Itinerary</span>
+              {hasSearched && (
+                <span className="mobile-tab-badge">Ready</span>
+              )}
             </button>
           </div>
         )}
 
         <div className="layout-split-container">
-          {/* ================= LEFT 50% PANEL: CHATBOT & EMBEDDED TRIP FORM ================= */}
+          {/* ================= LEFT PANEL: CHATBOT & EMBEDDED TRIP FORM ================= */}
           <ChatPanel
             isMobile={isMobile}
             mobileActiveTab={mobileActiveTab}
@@ -555,10 +561,12 @@ export default function App() {
             setInputText={setInputText}
             handleSendMessage={handleSendMessage}
             tripFormProps={tripFormProps}
+            hasSearched={hasSearched}
+            onViewItinerary={() => setMobileActiveTab('itinerary')}
           />
 
-          {/* ================= RIGHT 50% PANEL: VISUAL BANNER & 4-CAPSULE EXPLORER ================= */}
-          <div className={`panel-right ${isMobile && mobileActiveTab !== 'explorer' ? 'hidden-mobile' : ''}`}>
+          {/* ================= RIGHT PANEL: VISUAL BANNER & 4-CAPSULE EXPLORER ================= */}
+          <div className={`panel-right ${isMobile && mobileActiveTab !== 'itinerary' ? 'hidden-mobile' : ''}`}>
             {/* TOP: VISUAL HERO BANNER */}
             <HeroBanner
               activeHeroImage={activeHeroImage}

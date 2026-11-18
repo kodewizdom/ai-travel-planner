@@ -14,10 +14,12 @@ export default function ChatPanel({
   inputText,
   setInputText,
   handleSendMessage,
-  tripFormProps
+  tripFormProps,
+  hasSearched,
+  onViewItinerary
 }) {
   return (
-    <div className={`panel-left ${isMobile && mobileActiveTab !== 'chat' ? 'hidden-mobile' : ''}`}>
+    <div className={`panel-left ${isMobile && mobileActiveTab !== 'planner' ? 'hidden-mobile' : ''}`}>
       {/* Scrollable Chat Area */}
       <div className="chat-feed" ref={chatScrollRef}>
         {/* INITIAL GREETING MESSAGE & EMBEDDED TRIP PLANNER INPUT CARD */}
@@ -41,6 +43,21 @@ export default function ChatPanel({
           {/* TRIP INPUT FORM CARD EMBEDDED IN CHAT */}
           <TripForm {...tripFormProps} />
         </div>
+
+        {/* QUICK SHORTCUT BANNER FOR MOBILE WHEN ITINERARY IS READY */}
+        {isMobile && hasSearched && (
+          <div className="mobile-itinerary-banner">
+            <button
+              type="button"
+              className="mobile-itinerary-jump-btn"
+              onClick={onViewItinerary}
+            >
+              <Compass size={15} />
+              <span>View Live Itinerary & Bookings</span>
+              <span className="btn-arrow">→</span>
+            </button>
+          </div>
+        )}
 
         {/* CONVERSATION MESSAGES */}
         {messages.map((msg, index) => {

@@ -205,7 +205,7 @@ export default function DetailModal({
                     onClick={() => {
                       setInputText(`Tell me more about staying at ${selectedItemDetail.data.name} in ${selectedItemDetail.data.location} and nearby spots.`);
                       setSelectedItemDetail(null);
-                      if (isMobile) setMobileActiveTab('chat');
+                      if (isMobile) setMobileActiveTab('planner');
                     }}
                   >
                     <span className="portal-btn-title">Ask AI Itinerary Guide</span>
@@ -284,7 +284,7 @@ export default function DetailModal({
                     onClick={() => {
                       setInputText(`Recommend a dinner plan including ${selectedItemDetail.data.name} in ${destination || 'the city'}.`);
                       setSelectedItemDetail(null);
-                      if (isMobile) setMobileActiveTab('chat');
+                      if (isMobile) setMobileActiveTab('planner');
                     }}
                   >
                     <span className="portal-btn-title">Add to Itinerary via Chat</span>
@@ -350,7 +350,7 @@ export default function DetailModal({
                     onClick={() => {
                       setInputText(`What is the best way to visit ${selectedItemDetail.data.name} and how much time should I spend?`);
                       setSelectedItemDetail(null);
-                      if (isMobile) setMobileActiveTab('chat');
+                      if (isMobile) setMobileActiveTab('planner');
                     }}
                   >
                     <span className="portal-btn-title">Ask AI for Visiting Tips</span>
