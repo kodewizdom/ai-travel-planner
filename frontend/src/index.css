@@ -1863,8 +1863,34 @@ body {
   border: 1px solid var(--border-color);
 }
 
+.portal-btn.btn-airline.primary-portal {
+  background: #1d4ed8;
+  color: #ffffff !important;
+  border: 1px solid #2563eb;
+  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.28);
+}
+
+.portal-btn.btn-airline.primary-portal:hover {
+  background: #1e40af;
+  color: #ffffff !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(29, 78, 216, 0.38);
+}
+
 .portal-btn.btn-airline:hover {
   border-color: var(--accent);
+  background: var(--bg-card-hover);
+  transform: translateY(-1px);
+}
+
+.portal-btn.btn-gflights {
+  background: var(--bg-card);
+  color: var(--text-main) !important;
+  border: 1px solid var(--border-color);
+}
+
+.portal-btn.btn-gflights:hover {
+  border-color: #3b82f6;
   background: var(--bg-card-hover);
   transform: translateY(-1px);
 }

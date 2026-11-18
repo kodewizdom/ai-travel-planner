@@ -166,8 +166,11 @@ def format_flight_card(opt: dict[str, Any], leg_orig: str, leg_dest: str, leg_da
     duration = opt.get("duration", "2h 15m")
     stops = opt.get("stops", "Non-stop")
     price = int(opt.get("price", 5490))
+    portal = tools.get_airline_portal(airline, flight_no)
+    airline_url = opt.get("airline_url") or opt.get("booking_link") or portal["url"]
+    airline_name = opt.get("airline_name") or (portal["name"] if portal["name"] != "Airline Official" else airline)
     return {
-        "airline": airline,
+        "airline": airline_name,
         "flightNo": flight_no,
         "departureTime": dep_time,
         "arrivalTime": arr_time,
@@ -182,6 +185,9 @@ def format_flight_card(opt: dict[str, Any], leg_orig: str, leg_dest: str, leg_da
         "date": leg_date or "",
         "isLive": is_live,
         "dataSource": data_source,
+        "booking_link": airline_url,
+        "airline_url": airline_url,
+        "airline_name": airline_name,
     }
 
 

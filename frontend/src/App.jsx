@@ -643,7 +643,7 @@ export default function App() {
     return dateStr;
   };
 
-  // Generate authentic direct booking portal links (MakeMyTrip, Official Airline, EaseMyTrip)
+  // Generate authentic direct official airline booking portal links
   const getFlightBookingPortals = (flight, isReturn = false) => {
     const flightOrig = flight?.origin || (isReturn ? destination : origin);
     const flightDest = flight?.destination || (isReturn ? origin : destination);
@@ -651,41 +651,52 @@ export default function App() {
     const destIata = resolveIATA(flightDest, isReturn ? 'DEL' : 'PAT');
     const dDate = flight?.date || (isReturn ? (returnDate || departureDate) : (departureDate || formatDate(new Date())));
     const ddmmyyyy = formatPortalDate(dDate);
-    const pax = travellers || 1;
 
-    // 1. MakeMyTrip (India's leading flight booking portal)
-    const mmtUrl = `https://www.makemytrip.com/flight/search?itinerary=${origIata}-${destIata}-${ddmmyyyy}&tripType=O&paxType=A-${pax}_C-0_I-0&intl=false&cabinClass=E`;
-
-    // 2. EaseMyTrip (Zero convenience fee portal)
-    const emtUrl = `https://flight.easemytrip.com/FlightList/Index?srch=${origIata}-${destIata}-${ddmmyyyy}&px=${pax}-0-0&cbn=0&ar=undefined&isqs=true`;
-
-    // 3. Airline Official Portal
-    const airlineName = flight?.airline || 'Airline';
+    const airlineName = flight?.airline_name || flight?.airline || 'Airline';
     const airlineLower = airlineName.toLowerCase();
-    let airlineUrl = 'https://www.goindigo.in/';
+    const flightNo = (flight?.flightNo || flight?.flight_number || '').toUpperCase().trim();
+
+    let airlineUrl = flight?.airline_url || flight?.booking_link;
     let airlineLabel = `${airlineName} Official`;
 
-    if (airlineLower.includes('indigo')) {
+    if (flightNo.startsWith('6E') || airlineLower.includes('indigo')) {
       airlineUrl = 'https://www.goindigo.in/';
       airlineLabel = 'IndiGo Official';
-    } else if (airlineLower.includes('air india express')) {
+    } else if (flightNo.startsWith('IX') || airlineLower.includes('air india express') || (airlineLower.includes('express') && airlineLower.includes('air'))) {
       airlineUrl = 'https://www.airindiaexpress.com/';
       airlineLabel = 'Air India Express';
-    } else if (airlineLower.includes('air india')) {
+    } else if (flightNo.startsWith('AI') || airlineLower.includes('air india')) {
       airlineUrl = 'https://www.airindia.com/';
       airlineLabel = 'Air India Official';
-    } else if (airlineLower.includes('akasa')) {
+    } else if (flightNo.startsWith('QP') || airlineLower.includes('akasa')) {
       airlineUrl = 'https://www.akasaair.com/';
       airlineLabel = 'Akasa Air Official';
-    } else if (airlineLower.includes('spicejet')) {
+    } else if (flightNo.startsWith('SG') || airlineLower.includes('spicejet') || airlineLower.includes('spice')) {
       airlineUrl = 'https://www.spicejet.com/';
       airlineLabel = 'SpiceJet Official';
+    } else if (flightNo.startsWith('UK') || airlineLower.includes('vistara')) {
+      airlineUrl = 'https://www.airindia.com/';
+      airlineLabel = 'Air India (Vistara)';
+    } else if (flightNo.startsWith('9I') || airlineLower.includes('alliance')) {
+      airlineUrl = 'https://allianceair.in/';
+      airlineLabel = 'Alliance Air';
+    } else if (flightNo.startsWith('S9') || airlineLower.includes('flybig')) {
+      airlineUrl = 'https://flybig.in/';
+      airlineLabel = 'FlyBig';
+    } else if (flightNo.startsWith('S5') || airlineLower.includes('star air')) {
+      airlineUrl = 'https://starair.in/';
+      airlineLabel = 'Star Air';
+    } else if (!airlineUrl) {
+      airlineUrl = 'https://www.goindigo.in/';
+      airlineLabel = 'Airline Official Portal';
     }
 
+    const gFlightsUrl = `https://www.google.com/travel/flights?q=flights+from+${origIata}+to+${destIata}+on+${dDate}`;
+
     return {
-      mmt: mmtUrl,
-      emt: emtUrl,
+      directUrl: airlineUrl,
       airline: { name: airlineLabel, url: airlineUrl },
+      googleFlights: gFlightsUrl,
       route: `${origIata} → ${destIata}`,
       dateFormatted: ddmmyyyy
     };
@@ -1331,12 +1342,12 @@ export default function App() {
                                 const portals = getFlightBookingPortals(flight, false);
                                 return (
                                   <a
-                                    href={portals.mmt}
+                                    href={portals.airline.url}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="compact-details-btn book-btn"
                                     onClick={(e) => e.stopPropagation()}
-                                    title={`Book Outbound on MakeMyTrip (${portals.route} · ${portals.dateFormatted})`}
+                                    title={`Book directly on ${portals.airline.name} (${flight.flightNo || portals.route})`}
                                   >
                                     <span>Book</span>
                                     <ExternalLink size={11} />
@@ -1396,12 +1407,12 @@ export default function App() {
                                 const portals = getFlightBookingPortals(flight, true);
                                 return (
                                   <a
-                                    href={portals.mmt}
+                                    href={portals.airline.url}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="compact-details-btn book-btn"
                                     onClick={(e) => e.stopPropagation()}
-                                    title={`Book Return on MakeMyTrip (${portals.route} · ${portals.dateFormatted})`}
+                                    title={`Book Return directly on ${portals.airline.name} (${flight.flightNo || portals.route})`}
                                   >
                                     <span>Book</span>
                                     <ExternalLink size={11} />
@@ -1462,12 +1473,12 @@ export default function App() {
                             const portals = getFlightBookingPortals(flight, false);
                             return (
                               <a
-                                href={portals.mmt}
+                                href={portals.airline.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="compact-details-btn book-btn"
                                 onClick={(e) => e.stopPropagation()}
-                                title={`Book on MakeMyTrip (${portals.route} · ${portals.dateFormatted})`}
+                                title={`Book directly on ${portals.airline.name} (${flight.flightNo || portals.route})`}
                               >
                                 <span>Book</span>
                                 <ExternalLink size={11} />
@@ -1748,38 +1759,26 @@ export default function App() {
                         return (
                           <>
                             <a
-                              href={portals.mmt}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="portal-btn btn-mmt"
-                              title={`Book on MakeMyTrip (${portals.route})`}
-                            >
-                              <span className="portal-btn-title">Book on MakeMyTrip</span>
-                              <span className="portal-btn-sub">{portals.route} · {portals.dateFormatted}</span>
-                              <ExternalLink size={13} className="portal-icon" />
-                            </a>
-
-                            <a
                               href={portals.airline.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="portal-btn btn-airline"
+                              className="portal-btn btn-airline primary-portal"
                               title={`Book directly on ${portals.airline.name}`}
                             >
                               <span className="portal-btn-title">Book on {portals.airline.name}</span>
-                              <span className="portal-btn-sub">Direct Airline Portal</span>
+                              <span className="portal-btn-sub">Official Airline Portal · {selectedItemDetail.data.flightNo || portals.route}</span>
                               <ExternalLink size={13} className="portal-icon" />
                             </a>
 
                             <a
-                              href={portals.emt}
+                              href={portals.googleFlights}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="portal-btn btn-emt"
-                              title="Book on EaseMyTrip (Zero convenience fee)"
+                              className="portal-btn btn-gflights"
+                              title={`Verify schedule on Google Flights (${portals.route})`}
                             >
-                              <span className="portal-btn-title">Book on EaseMyTrip</span>
-                              <span className="portal-btn-sub">Zero Convenience Fee</span>
+                              <span className="portal-btn-title">Verify on Google Flights</span>
+                              <span className="portal-btn-sub">{portals.route} · {portals.dateFormatted}</span>
                               <ExternalLink size={13} className="portal-icon" />
                             </a>
                           </>
